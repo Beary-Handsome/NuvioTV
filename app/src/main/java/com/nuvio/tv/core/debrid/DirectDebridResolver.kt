@@ -23,6 +23,8 @@ class DirectDebridResolver @Inject constructor(
     private val torboxResolver: TorboxDirectDebridResolver,
     private val realDebridResolver: RealDebridDirectDebridResolver,
     private val premiumizeResolver: PremiumizeDirectDebridResolver,
+    private val allDebridResolver: AllDebridDirectDebridResolver,
+    private val easynewsResolver: EasynewsDirectDebridResolver,
     private val localDebridService: LocalDebridService
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -154,6 +156,19 @@ class DirectDebridResolver @Inject constructor(
             DebridProviders.TORBOX_ID -> torboxResolver.resolve(stream, season, episode)
             DebridProviders.PREMIUMIZE_ID -> premiumizeResolver.resolve(stream, season, episode)
             DebridProviders.REAL_DEBRID_ID -> realDebridResolver.resolve(stream, season, episode)
+            DebridProviders.ALLDEBRID_ID -> {
+                val settings = dataStore.settings.first()
+                val apiKey = settings.allDebridApiKey
+                if (apiKey.isBlank()) DirectDebridResolveResult.Error
+                else {
+                    val url = allDebridResolver.resolve(apiKey, stream.infoHash ?: "", stream.fileIdx)
+                    if (url != null) DirectDebridResolveResult.Resolved(url)
+                    else DirectDebridResolveResult.Error
+                }
+            }
+            // EasyNews doesn't resolve via infohash — it's keyword-search based.
+            // EN streams arrive with a pre-built URL from the addon, so they play directly.
+            DebridProviders.EASYNEWS_ID -> DirectDebridResolveResult.Error
             else -> DirectDebridResolveResult.Error
         }
     }
@@ -246,6 +261,11 @@ class DirectDebridResolver @Inject constructor(
         return when (account.provider.id) {
             DebridProviders.TORBOX_ID -> torboxResolver.resolve(resolveStream, season, episode)
             DebridProviders.PREMIUMIZE_ID -> premiumizeResolver.resolve(resolveStream, season, episode)
+            DebridProviders.ALLDEBRID_ID -> {
+                val url = allDebridResolver.resolve(account.apiKey, resolveStream.infoHash ?: "", resolveStream.fileIdx)
+                if (url != null) DirectDebridResolveResult.Resolved(url)
+                else DirectDebridResolveResult.Error
+            }
             else -> DirectDebridResolveResult.Error
         }
     }

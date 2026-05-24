@@ -1,5 +1,6 @@
 package com.nuvio.tv.core.debrid
 
+import com.nuvio.tv.data.remote.api.AllDebridApi
 import com.nuvio.tv.data.remote.api.PremiumizeApi
 import com.nuvio.tv.data.remote.api.TorboxApi
 import com.nuvio.tv.data.remote.dto.TorboxCheckCachedRequestDto
@@ -15,7 +16,8 @@ data class LocalDebridCachedItem(
 @Singleton
 class LocalDebridService @Inject constructor(
     private val torboxApi: TorboxApi,
-    private val premiumizeApi: PremiumizeApi
+    private val premiumizeApi: PremiumizeApi,
+    private val allDebridApi: AllDebridApi
 ) {
     suspend fun checkCached(
         account: DebridServiceCredential,
@@ -24,6 +26,7 @@ class LocalDebridService @Inject constructor(
         when (account.provider.id) {
             DebridProviders.TORBOX_ID -> checkTorboxCached(account.apiKey, hashes)
             DebridProviders.PREMIUMIZE_ID -> checkPremiumizeCached(account.apiKey, hashes)
+            DebridProviders.ALLDEBRID_ID -> checkAllDebridCached(account.apiKey, hashes)
             else -> null
         }
 
@@ -81,6 +84,29 @@ class LocalDebridService @Inject constructor(
                         size = body.filesize?.getOrNull(index)
                     )
                 }.toMap()
+            }
+        } catch (error: Exception) {
+            if (error is CancellationException) throw error
+            null
+        }
+
+    private suspend fun checkAllDebridCached(
+        apiKey: String,
+        hashes: List<String>
+    ): Map<String, LocalDebridCachedItem>? =
+        try {
+            val normalizedHashes = hashes.normalizedHashes()
+            if (normalizedHashes.isEmpty()) return emptyMap()
+            val response = allDebridApi.checkInstant(apiKey = apiKey, magnets = normalizedHashes)
+            if (!response.isSuccessful) return null
+            val magnets = response.body()?.data?.magnets ?: return emptyMap()
+            buildMap {
+                magnets.forEach { m ->
+                    val hash = m.hash?.trim()?.lowercase()
+                    if (hash != null && m.instant == true) {
+                        put(hash, LocalDebridCachedItem(name = null, size = null))
+                    }
+                }
             }
         } catch (error: Exception) {
             if (error is CancellationException) throw error

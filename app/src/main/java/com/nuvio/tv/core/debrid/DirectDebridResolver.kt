@@ -159,15 +159,17 @@ class DirectDebridResolver @Inject constructor(
             DebridProviders.ALLDEBRID_ID -> {
                 val settings = dataStore.settings.first()
                 val apiKey = settings.allDebridApiKey
-                if (apiKey.isBlank()) DirectDebridResolveResult.Error
+                if (apiKey.isBlank()) DirectDebridResolveResult.MissingApiKey
                 else {
                     val url = allDebridResolver.resolve(apiKey, stream.infoHash ?: "", stream.fileIdx)
-                    if (url != null) DirectDebridResolveResult.Resolved(url)
-                    else DirectDebridResolveResult.Error
+                    if (url != null) DirectDebridResolveResult.Success(
+                        url = url,
+                        filename = stream.behaviorHints?.filename,
+                        videoSize = null
+                    )
+                    else DirectDebridResolveResult.Stale
                 }
             }
-            // EasyNews doesn't resolve via infohash — it's keyword-search based.
-            // EN streams arrive with a pre-built URL from the addon, so they play directly.
             DebridProviders.EASYNEWS_ID -> DirectDebridResolveResult.Error
             else -> DirectDebridResolveResult.Error
         }
@@ -263,8 +265,12 @@ class DirectDebridResolver @Inject constructor(
             DebridProviders.PREMIUMIZE_ID -> premiumizeResolver.resolve(resolveStream, season, episode)
             DebridProviders.ALLDEBRID_ID -> {
                 val url = allDebridResolver.resolve(account.apiKey, resolveStream.infoHash ?: "", resolveStream.fileIdx)
-                if (url != null) DirectDebridResolveResult.Resolved(url)
-                else DirectDebridResolveResult.Error
+                if (url != null) DirectDebridResolveResult.Success(
+                    url = url,
+                    filename = resolveStream.behaviorHints?.filename,
+                    videoSize = null
+                )
+                else DirectDebridResolveResult.Stale
             }
             else -> DirectDebridResolveResult.Error
         }

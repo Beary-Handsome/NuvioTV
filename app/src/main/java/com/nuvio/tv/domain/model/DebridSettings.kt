@@ -10,6 +10,9 @@ data class DebridSettings(
     val torboxApiKey: String = "",
     val premiumizeApiKey: String = "",
     val realDebridApiKey: String = "",
+    val allDebridApiKey: String = "",
+    val easynewsUsername: String = "",
+    val easynewsPassword: String = "",
     val preferredResolverProviderId: String = "",
     val instantPlaybackPreparationLimit: Int = 0,
     val streamMaxResults: Int = 0,
@@ -52,9 +55,23 @@ data class DebridSettings(
             DebridProviders.TORBOX_ID -> torboxApiKey
             DebridProviders.PREMIUMIZE_ID -> premiumizeApiKey
             DebridProviders.REAL_DEBRID_ID -> realDebridApiKey
+            DebridProviders.ALLDEBRID_ID -> allDebridApiKey
+            DebridProviders.EASYNEWS_ID -> {
+                if (easynewsUsername.isNotBlank() && easynewsPassword.isNotBlank()) {
+                    "$easynewsUsername:$easynewsPassword"
+                } else {
+                    ""
+                }
+            }
             else -> ""
         }
     }
+
+    val isEasynewsConfigured: Boolean
+        get() = easynewsUsername.isNotBlank() && easynewsPassword.isNotBlank()
+
+    val isAllDebridConfigured: Boolean
+        get() = allDebridApiKey.isNotBlank()
 }
 
 const val DEBRID_PREPARE_INSTANT_PLAYBACK_DEFAULT_LIMIT = 2

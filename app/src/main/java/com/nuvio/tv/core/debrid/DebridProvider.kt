@@ -20,18 +20,22 @@ enum class DebridProviderCapability {
     ClientResolve,
     LocalTorrentCacheCheck,
     LocalTorrentResolve,
-    CloudLibrary
+    CloudLibrary,
+    KeywordSearch     // EasyNews: title-based search instead of infohash cache-check
 }
 
 enum class DebridProviderAuthMethod {
     ApiKey,
-    DeviceCode
+    DeviceCode,
+    BasicAuth         // EasyNews: user + password
 }
 
 object DebridProviders {
     const val TORBOX_ID = "torbox"
     const val PREMIUMIZE_ID = "premiumize"
     const val REAL_DEBRID_ID = "realdebrid"
+    const val ALLDEBRID_ID = "alldebrid"
+    const val EASYNEWS_ID = "easynews"
 
     val Torbox = DebridProvider(
         id = TORBOX_ID,
@@ -63,11 +67,37 @@ object DebridProviders {
         id = REAL_DEBRID_ID,
         displayName = "Real-Debrid",
         shortName = "RD",
-        visibleInUi = false,
-        capabilities = setOf(DebridProviderCapability.ClientResolve)
+        visibleInUi = true,
+        capabilities = setOf(
+            DebridProviderCapability.ClientResolve,
+            DebridProviderCapability.LocalTorrentResolve
+        )
     )
 
-    private val registered = listOf(Torbox, Premiumize, RealDebrid)
+    val AllDebrid = DebridProvider(
+        id = ALLDEBRID_ID,
+        displayName = "AllDebrid",
+        shortName = "AD",
+        capabilities = setOf(
+            DebridProviderCapability.ClientResolve,
+            DebridProviderCapability.LocalTorrentCacheCheck,
+            DebridProviderCapability.LocalTorrentResolve,
+            DebridProviderCapability.CloudLibrary
+        )
+    )
+
+    val EasyNews = DebridProvider(
+        id = EASYNEWS_ID,
+        displayName = "EasyNews",
+        shortName = "EN",
+        authMethod = DebridProviderAuthMethod.BasicAuth,
+        capabilities = setOf(
+            DebridProviderCapability.ClientResolve,
+            DebridProviderCapability.KeywordSearch
+        )
+    )
+
+    private val registered = listOf(Torbox, AllDebrid, Premiumize, RealDebrid, EasyNews)
 
     fun all(): List<DebridProvider> = registered
 

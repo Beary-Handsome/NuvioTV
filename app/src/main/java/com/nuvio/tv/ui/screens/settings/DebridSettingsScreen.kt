@@ -198,6 +198,7 @@ fun DebridSettingsContent(
                                     when (provider.authMethod) {
                                         DebridProviderAuthMethod.DeviceCode -> activeDeviceAuthDialog = provider.id
                                         DebridProviderAuthMethod.ApiKey -> activeApiKeyDialog = provider.id
+                                        DebridProviderAuthMethod.BasicAuth -> activeApiKeyDialog = provider.id
                                     }
                                 },
                                 enabled = true
@@ -1579,6 +1580,7 @@ private fun providerCredentialStatus(
     when (provider.authMethod) {
         DebridProviderAuthMethod.DeviceCode -> if (credential.isBlank()) notSetLabel else connectedLabel
         DebridProviderAuthMethod.ApiKey -> maskDebridApiKey(credential, notSetLabel)
+        DebridProviderAuthMethod.BasicAuth -> if (credential.isBlank()) notSetLabel else connectedLabel
     }
 
 private enum class DebridStreamPicker {

@@ -111,6 +111,7 @@ class AllDebridDirectDebridResolver @Inject constructor(
             return downloadUrl
 
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             Log.e(TAG, "Resolution failed for $infoHash: ${e.message}")
             return null
         }
@@ -129,6 +130,7 @@ class AllDebridDirectDebridResolver @Inject constructor(
             val magnets = response.body()?.data?.magnets ?: return emptyMap()
             magnets.associate { (it.hash?.lowercase() ?: "") to (it.instant == true) }
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             Log.e(TAG, "Cache check failed: ${e.message}")
             emptyMap()
         }

@@ -88,6 +88,7 @@ class EasynewsDirectDebridResolver @Inject constructor(
                 .take(limit)
 
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             Log.e(TAG, "Search failed for '$title': ${e.message}")
             return emptyList()
         }

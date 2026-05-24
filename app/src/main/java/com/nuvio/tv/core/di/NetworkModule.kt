@@ -16,6 +16,8 @@ import com.nuvio.tv.data.remote.api.IntroDbApi
 import com.nuvio.tv.data.remote.api.ImdbTapframeApi
 import com.nuvio.tv.data.remote.api.MDBListApi
 import com.nuvio.tv.data.remote.api.ParentalGuideApi
+import com.nuvio.tv.data.remote.api.AllDebridApi
+import com.nuvio.tv.data.remote.api.EasynewsApi
 import com.nuvio.tv.data.remote.api.PlaybackIssueReportApi
 import com.nuvio.tv.data.remote.api.PremiumizeApi
 import com.nuvio.tv.data.remote.api.RealDebridApi
@@ -366,6 +368,48 @@ object NetworkModule {
     @Singleton
     fun providePremiumizeApi(@Named("premiumize") retrofit: Retrofit): PremiumizeApi =
         retrofit.create(PremiumizeApi::class.java)
+
+    // ── AllDebrid ──────────────────────────────────────────────────────────
+
+    @Provides
+    @Singleton
+    @Named("alldebrid")
+    fun provideAllDebridRetrofit(
+        @Named("directDebrid") okHttpClient: OkHttpClient,
+        moshi: Moshi
+    ): Retrofit =
+        Retrofit.Builder()
+            .baseUrl("https://api.alldebrid.com/v4.1/")
+            .client(okHttpClient)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
+
+    @Provides
+    @Singleton
+    fun provideAllDebridApi(@Named("alldebrid") retrofit: Retrofit): AllDebridApi =
+        retrofit.create(AllDebridApi::class.java)
+
+    // ── EasyNews ──────────────────────────────────────────────────────────
+
+    @Provides
+    @Singleton
+    @Named("easynews")
+    fun provideEasynewsRetrofit(
+        @Named("directDebrid") okHttpClient: OkHttpClient,
+        moshi: Moshi
+    ): Retrofit =
+        Retrofit.Builder()
+            .baseUrl("https://members.easynews.com/")
+            .client(okHttpClient)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
+
+    @Provides
+    @Singleton
+    fun provideEasynewsApi(@Named("easynews") retrofit: Retrofit): EasynewsApi =
+        retrofit.create(EasynewsApi::class.java)
+
+    // ── TMDB + Trakt ──────────────────────────────────────────────────────
 
     @Provides
     @Singleton

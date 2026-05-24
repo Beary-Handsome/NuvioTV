@@ -222,7 +222,6 @@ class AddonPreferences @Inject constructor(
     }
 
     private fun getDefaultAddons(): Set<String> = setOf(
-        "https://v3-cinemeta.strem.io",
-        "https://opensubtitles-v3.strem.io"
+        "https://rivenmedia.duckdns.org/riven"
     )
 }

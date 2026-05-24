@@ -22,7 +22,8 @@ class AppOnboardingDataStore @Inject constructor(
     private val hasSeenAuthQrOnFirstLaunchKey = booleanPreferencesKey("has_seen_auth_qr_on_first_launch")
 
     val hasSeenAuthQrOnFirstLaunch: Flow<Boolean> = dataStore.data.map { prefs ->
-        prefs[hasSeenAuthQrOnFirstLaunchKey] ?: false
+        // Always return true — skip the QR cloud sync prompt entirely
+        true
     }
 
     suspend fun setHasSeenAuthQrOnFirstLaunch(value: Boolean) {

@@ -158,17 +158,7 @@ class DirectDebridResolver @Inject constructor(
             DebridProviders.REAL_DEBRID_ID -> realDebridResolver.resolve(stream, season, episode)
             DebridProviders.ALLDEBRID_ID -> {
                 val settings = dataStore.settings.first()
-                val apiKey = settings.allDebridApiKey
-                if (apiKey.isBlank()) DirectDebridResolveResult.MissingApiKey
-                else {
-                    val url = allDebridResolver.resolve(apiKey, stream.infoHash ?: "", stream.fileIdx)
-                    if (url != null) DirectDebridResolveResult.Success(
-                        url = url,
-                        filename = stream.behaviorHints?.filename,
-                        videoSize = null
-                    )
-                    else DirectDebridResolveResult.Stale
-                }
+                resolveViaAllDebrid(settings.allDebridApiKey, stream.infoHash, stream.fileIdx, stream.behaviorHints?.filename)
             }
             DebridProviders.EASYNEWS_ID -> DirectDebridResolveResult.Error
             else -> DirectDebridResolveResult.Error
@@ -263,17 +253,21 @@ class DirectDebridResolver @Inject constructor(
         return when (account.provider.id) {
             DebridProviders.TORBOX_ID -> torboxResolver.resolve(resolveStream, season, episode)
             DebridProviders.PREMIUMIZE_ID -> premiumizeResolver.resolve(resolveStream, season, episode)
-            DebridProviders.ALLDEBRID_ID -> {
-                val url = allDebridResolver.resolve(account.apiKey, resolveStream.infoHash ?: "", resolveStream.fileIdx)
-                if (url != null) DirectDebridResolveResult.Success(
-                    url = url,
-                    filename = resolveStream.behaviorHints?.filename,
-                    videoSize = null
-                )
-                else DirectDebridResolveResult.Stale
-            }
+            DebridProviders.ALLDEBRID_ID -> resolveViaAllDebrid(
+                account.apiKey, resolveStream.infoHash, resolveStream.fileIdx, resolveStream.behaviorHints?.filename
+            )
             else -> DirectDebridResolveResult.Error
         }
+    }
+
+    private suspend fun resolveViaAllDebrid(
+        apiKey: String, infoHash: String?, fileIdx: Int?, filename: String?
+    ): DirectDebridResolveResult {
+        if (apiKey.isBlank()) return DirectDebridResolveResult.MissingApiKey
+        val url = allDebridResolver.resolve(apiKey, infoHash ?: "", fileIdx)
+        return if (url != null) DirectDebridResolveResult.Success(
+            url = url, filename = filename, videoSize = null
+        ) else DirectDebridResolveResult.Stale
     }
 
     private fun localTorrentResolveCredential(

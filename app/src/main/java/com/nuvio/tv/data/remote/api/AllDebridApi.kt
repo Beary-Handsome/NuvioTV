@@ -18,6 +18,12 @@ import retrofit2.http.*
  */
 interface AllDebridApi {
 
+    @GET("user")
+    suspend fun getUser(
+        @Query("agent") agent: String = "nuvio",
+        @Query("apikey") apiKey: String
+    ): Response<AllDebridEnvelopeDto<Any>>
+
     @POST("magnet/instant")
     @FormUrlEncoded
     suspend fun checkInstant(

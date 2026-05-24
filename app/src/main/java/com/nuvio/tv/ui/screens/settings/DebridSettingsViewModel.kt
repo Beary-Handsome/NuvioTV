@@ -20,7 +20,9 @@ import com.nuvio.tv.data.remote.dto.PremiumizeDeviceTokenDto
 import com.nuvio.tv.data.remote.dto.TorboxDeviceTokenDto
 import com.nuvio.tv.data.remote.dto.TorboxDeviceTokenRequestDto
 import com.nuvio.tv.data.remote.dto.TorboxEnvelopeDto
+import com.nuvio.tv.data.remote.api.AllDebridApi
 import com.nuvio.tv.data.remote.api.PremiumizeApi
+import com.nuvio.tv.data.remote.api.RealDebridApi
 import com.nuvio.tv.data.remote.api.TorboxApi
 import com.nuvio.tv.domain.model.DEBRID_PREPARE_INSTANT_PLAYBACK_DEFAULT_LIMIT
 import com.nuvio.tv.domain.model.DebridSettings
@@ -47,7 +49,9 @@ class DebridSettingsViewModel @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val dataStore: DebridSettingsDataStore,
     private val torboxApi: TorboxApi,
-    private val premiumizeApi: PremiumizeApi
+    private val premiumizeApi: PremiumizeApi,
+    private val allDebridApi: AllDebridApi,
+    private val realDebridApi: RealDebridApi
 ) : ViewModel() {
     private var formatterServer: DebridFormatterConfigServer? = null
     private var logoBytes: ByteArray? = null
@@ -240,6 +244,16 @@ class DebridSettingsViewModel @Inject constructor(
                     val response = premiumizeApi.accountInfo("Bearer $apiKey")
                     response.errorBody()?.close()
                     response.isSuccessful && !response.body()?.status.equals("error", ignoreCase = true)
+                }
+                DebridProviders.ALLDEBRID_ID -> {
+                    val response = allDebridApi.getUser(apiKey = apiKey)
+                    response.errorBody()?.close()
+                    response.isSuccessful && response.body()?.status == "success"
+                }
+                DebridProviders.REAL_DEBRID_ID -> {
+                    val response = realDebridApi.getUser("Bearer $apiKey")
+                    response.errorBody()?.close()
+                    response.isSuccessful
                 }
                 else -> false
             }

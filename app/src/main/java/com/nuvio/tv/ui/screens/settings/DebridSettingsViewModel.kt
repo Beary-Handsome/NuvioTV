@@ -396,6 +396,8 @@ data class DebridSettingsUiState(
     val torboxApiKey: String = "",
     val premiumizeApiKey: String = "",
     val realDebridApiKey: String = "",
+    val allDebridApiKey: String = "",
+    val easynewsCredential: String = "",
     val preferredResolverProviderId: String = "",
     val instantPlaybackPreparationLimit: Int = 0,
     val streamMaxResults: Int = 0,
@@ -416,7 +418,9 @@ data class DebridSettingsUiState(
         get() = mapOf(
             DebridProviders.TORBOX_ID to torboxApiKey,
             DebridProviders.PREMIUMIZE_ID to premiumizeApiKey,
-            DebridProviders.REAL_DEBRID_ID to realDebridApiKey
+            DebridProviders.REAL_DEBRID_ID to realDebridApiKey,
+            DebridProviders.ALLDEBRID_ID to allDebridApiKey,
+            DebridProviders.EASYNEWS_ID to easynewsCredential
         )
 
     val hasAnyApiKey: Boolean
@@ -462,6 +466,8 @@ data class DebridSettingsUiState(
         torboxApiKey = settings.torboxApiKey,
         premiumizeApiKey = settings.premiumizeApiKey,
         realDebridApiKey = settings.realDebridApiKey,
+        allDebridApiKey = settings.allDebridApiKey,
+        easynewsCredential = if (settings.isEasynewsConfigured) "${settings.easynewsUsername}:${settings.easynewsPassword}" else "",
         preferredResolverProviderId = settings.preferredResolverProviderId,
         instantPlaybackPreparationLimit = settings.instantPlaybackPreparationLimit,
         streamMaxResults = settings.streamMaxResults,

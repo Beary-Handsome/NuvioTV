@@ -47,6 +47,9 @@ class DebridSettingsDataStore @Inject constructor(
     private val torboxApiKeyKey = stringPreferencesKey("torbox_api_key")
     private val premiumizeApiKeyKey = stringPreferencesKey("premiumize_api_key")
     private val realDebridApiKeyKey = stringPreferencesKey("real_debrid_api_key")
+    private val allDebridApiKeyKey = stringPreferencesKey("alldebrid_api_key")
+    private val easynewsUsernameKey = stringPreferencesKey("easynews_username")
+    private val easynewsPasswordKey = stringPreferencesKey("easynews_password")
     private val preferredResolverProviderIdKey = stringPreferencesKey("preferred_resolver_provider_id")
     private val instantPlaybackPreparationLimitKey = intPreferencesKey("instant_playback_preparation_limit")
     private val streamMaxResultsKey = intPreferencesKey("stream_max_results")
@@ -81,6 +84,9 @@ class DebridSettingsDataStore @Inject constructor(
                 torboxApiKey = prefs[torboxApiKeyKey] ?: "",
                 premiumizeApiKey = prefs[premiumizeApiKeyKey] ?: "",
                 realDebridApiKey = prefs[realDebridApiKeyKey] ?: "",
+                allDebridApiKey = prefs[allDebridApiKeyKey] ?: "",
+                easynewsUsername = prefs[easynewsUsernameKey] ?: "",
+                easynewsPassword = prefs[easynewsPasswordKey] ?: "",
                 preferredResolverProviderId = preferredResolverProviderId(
                     stored = prefs[preferredResolverProviderIdKey],
                     torboxApiKey = prefs[torboxApiKeyKey] ?: "",
@@ -158,6 +164,17 @@ class DebridSettingsDataStore @Inject constructor(
 
     suspend fun setRealDebridApiKey(apiKey: String) {
         setProviderApiKey(DebridProviders.REAL_DEBRID_ID, apiKey)
+    }
+
+    suspend fun setAllDebridApiKey(apiKey: String) {
+        setProviderApiKey(DebridProviders.ALLDEBRID_ID, apiKey)
+    }
+
+    suspend fun setEasynewsCredentials(username: String, password: String) {
+        store().edit { prefs ->
+            prefs[easynewsUsernameKey] = username.trim()
+            prefs[easynewsPasswordKey] = password.trim()
+        }
     }
 
     suspend fun setInstantPlaybackPreparationLimit(limit: Int) {
@@ -286,6 +303,7 @@ class DebridSettingsDataStore @Inject constructor(
         DebridProviders.TORBOX_ID -> torboxApiKeyKey
         DebridProviders.PREMIUMIZE_ID -> premiumizeApiKeyKey
         DebridProviders.REAL_DEBRID_ID -> realDebridApiKeyKey
+        DebridProviders.ALLDEBRID_ID -> allDebridApiKeyKey
         else -> null
     }
 

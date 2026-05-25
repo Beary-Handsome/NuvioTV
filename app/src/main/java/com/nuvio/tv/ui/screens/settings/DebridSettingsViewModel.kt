@@ -213,7 +213,12 @@ class DebridSettingsViewModel @Inject constructor(
     }
 
     fun saveProviderCredential(providerId: String, value: String) {
-        update { dataStore.setProviderApiKey(providerId, value.trim()) }
+        viewModelScope.launch {
+            dataStore.setProviderApiKey(providerId, value.trim())
+            if (value.isNotBlank()) {
+                dataStore.setEnabled(true)  // Auto-enable debrid on successful auth
+            }
+        }
     }
 
     fun validateAndSaveTorboxApiKey(value: String, onSuccess: () -> Unit) {
@@ -233,6 +238,7 @@ class DebridSettingsViewModel @Inject constructor(
             _validating.value = false
             if (valid) {
                 dataStore.setProviderApiKey(providerId, trimmed)
+                dataStore.setEnabled(true)  // Auto-enable debrid when a key is saved
                 onSuccess()
             } else {
                 _validationError.tryEmit(context.getString(R.string.debrid_key_invalid))

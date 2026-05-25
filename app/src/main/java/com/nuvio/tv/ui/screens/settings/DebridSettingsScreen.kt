@@ -3,6 +3,10 @@
 package com.nuvio.tv.ui.screens.settings
 
 import android.view.KeyEvent
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
@@ -89,6 +93,7 @@ fun DebridSettingsContent(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var activeApiKeyDialog by remember { mutableStateOf<String?>(null) }
+    var activeBasicAuthDialog by remember { mutableStateOf<String?>(null) }
     var activeDeviceAuthDialog by remember { mutableStateOf<String?>(null) }
     var activeStreamPicker by remember { mutableStateOf<DebridStreamPicker?>(null) }
     var showResolverPicker by remember { mutableStateOf(false) }
@@ -196,7 +201,7 @@ fun DebridSettingsContent(
                                     when (provider.authMethod) {
                                         DebridProviderAuthMethod.DeviceCode -> activeDeviceAuthDialog = provider.id
                                         DebridProviderAuthMethod.ApiKey -> activeApiKeyDialog = provider.id
-                                        DebridProviderAuthMethod.BasicAuth -> activeApiKeyDialog = provider.id
+                                        DebridProviderAuthMethod.BasicAuth -> activeBasicAuthDialog = provider.id
                                     }
                                 },
                                 enabled = true
@@ -345,6 +350,27 @@ fun DebridSettingsContent(
                     activeApiKeyDialog = null
                 },
                 onDismiss = { activeApiKeyDialog = null }
+            )
+        }
+    }
+
+    // EasyNews uses username + password (BasicAuth), not an API key.
+    // Two separate text fields in a custom dialog.
+    activeBasicAuthDialog?.let { providerId ->
+        DebridProviders.byId(providerId)?.let { provider ->
+            DebridBasicAuthDialog(
+                title = provider.displayName,
+                currentUsername = uiState.easynewsUsername,
+                currentPassword = uiState.easynewsPassword,
+                onSave = { username, password ->
+                    viewModel.saveEasynewsCredentials(username, password)
+                    activeBasicAuthDialog = null
+                },
+                onClear = {
+                    viewModel.saveEasynewsCredentials("", "")
+                    activeBasicAuthDialog = null
+                },
+                onDismiss = { activeBasicAuthDialog = null }
             )
         }
     }
@@ -1471,4 +1497,77 @@ private enum class DebridStreamPicker {
     EXCLUDED_LANGUAGES,
     REQUIRED_RELEASE_GROUPS,
     EXCLUDED_RELEASE_GROUPS
+}
+
+
+/**
+ * Two-field dialog for EasyNews credentials (username + password).
+ */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun DebridBasicAuthDialog(
+    title: String,
+    currentUsername: String,
+    currentPassword: String,
+    onSave: (String, String) -> Unit,
+    onClear: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    var username by remember { mutableStateOf(currentUsername) }
+    var password by remember { mutableStateOf(currentPassword) }
+
+    NuvioDialog(
+        onDismiss = onDismiss,
+        title = "$title Login",
+        subtitle = "Enter your $title username and password"
+    ) {
+        OutlinedTextField(
+            value = username,
+            onValueChange = { username = it },
+            label = { Text("Username") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        OutlinedTextField(
+            value = password,
+            onValueChange = { password = it },
+            label = { Text("Password") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+            visualTransformation = PasswordVisualTransformation()
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Button(
+                onClick = {
+                    if (username.isNotBlank() && password.isNotBlank()) {
+                        onSave(username.trim(), password.trim())
+                    }
+                },
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.colors(
+                    containerColor = NuvioColors.Accent,
+                    contentColor = Color.White
+                )
+            ) {
+                Text("Save")
+            }
+            if (currentUsername.isNotBlank()) {
+                Button(
+                    onClick = onClear,
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.colors(
+                        containerColor = NuvioColors.BackgroundCard,
+                        contentColor = NuvioColors.TextPrimary
+                    )
+                ) {
+                    Text("Clear")
+                }
+            }
+        }
+    }
 }

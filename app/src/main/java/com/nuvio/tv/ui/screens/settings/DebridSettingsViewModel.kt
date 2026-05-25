@@ -174,6 +174,15 @@ class DebridSettingsViewModel @Inject constructor(
         update { dataStore.setStreamMaxResults(maxResults) }
     }
 
+    fun saveEasynewsCredentials(username: String, password: String) {
+        viewModelScope.launch {
+            dataStore.setEasynewsCredentials(username, password)
+            if (username.isNotBlank() && password.isNotBlank()) {
+                dataStore.setEnabled(true)
+            }
+        }
+    }
+
     fun setStreamSortMode(mode: DebridStreamSortMode) {
         update { dataStore.setStreamSortMode(mode) }
     }
@@ -398,6 +407,8 @@ data class DebridSettingsUiState(
     val realDebridApiKey: String = "",
     val allDebridApiKey: String = "",
     val easynewsCredential: String = "",
+    val easynewsUsername: String = "",
+    val easynewsPassword: String = "",
     val preferredResolverProviderId: String = "",
     val instantPlaybackPreparationLimit: Int = 0,
     val streamMaxResults: Int = 0,
@@ -468,6 +479,8 @@ data class DebridSettingsUiState(
         realDebridApiKey = settings.realDebridApiKey,
         allDebridApiKey = settings.allDebridApiKey,
         easynewsCredential = if (settings.isEasynewsConfigured) "${settings.easynewsUsername}:${settings.easynewsPassword}" else "",
+        easynewsUsername = settings.easynewsUsername,
+        easynewsPassword = settings.easynewsPassword,
         preferredResolverProviderId = settings.preferredResolverProviderId,
         instantPlaybackPreparationLimit = settings.instantPlaybackPreparationLimit,
         streamMaxResults = settings.streamMaxResults,

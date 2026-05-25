@@ -3,10 +3,6 @@
 package com.nuvio.tv.ui.screens.settings
 
 import android.view.KeyEvent
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
@@ -1503,7 +1499,6 @@ private enum class DebridStreamPicker {
 /**
  * Two-field dialog for EasyNews credentials (username + password).
  */
-@OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun DebridBasicAuthDialog(
     title: String,
@@ -1515,59 +1510,168 @@ private fun DebridBasicAuthDialog(
 ) {
     var username by remember { mutableStateOf(currentUsername) }
     var password by remember { mutableStateOf(currentPassword) }
+    val usernameFocusRequester = remember { FocusRequester() }
+    val passwordFocusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
+    val submit = {
+        if (username.isNotBlank() && password.isNotBlank()) {
+            focusManager.clearFocus()
+            keyboardController?.hide()
+            onSave(username.trim(), password.trim())
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        usernameFocusRequester.requestFocus()
+    }
 
     NuvioDialog(
         onDismiss = onDismiss,
         title = "$title Login",
-        subtitle = "Enter your $title username and password"
+        subtitle = "Enter your $title username and password",
+        width = 700.dp,
+        suppressFirstKeyUp = false
     ) {
-        OutlinedTextField(
-            value = username,
-            onValueChange = { username = it },
-            label = { Text("Username") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        OutlinedTextField(
-            value = password,
-            onValueChange = { password = it },
-            label = { Text("Password") },
-            singleLine = true,
+        // Username field
+        Card(
+            onClick = { usernameFocusRequester.requestFocus() },
             modifier = Modifier.fillMaxWidth(),
-            visualTransformation = PasswordVisualTransformation()
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Button(
-                onClick = {
-                    if (username.isNotBlank() && password.isNotBlank()) {
-                        onSave(username.trim(), password.trim())
-                    }
-                },
-                modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.colors(
-                    containerColor = NuvioColors.Accent,
-                    contentColor = Color.White
+            colors = CardDefaults.colors(
+                containerColor = NuvioColors.BackgroundElevated,
+                focusedContainerColor = NuvioColors.BackgroundElevated
+            ),
+            border = CardDefaults.border(
+                border = Border(
+                    border = BorderStroke(1.dp, NuvioColors.Border),
+                    shape = RoundedCornerShape(10.dp)
+                ),
+                focusedBorder = Border(
+                    border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                    shape = RoundedCornerShape(10.dp)
                 )
-            ) {
-                Text("Save")
+            ),
+            shape = CardDefaults.shape(RoundedCornerShape(10.dp)),
+            scale = CardDefaults.scale(focusedScale = 1f)
+        ) {
+            Box(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
+                BasicTextField(
+                    value = username,
+                    onValueChange = { username = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(usernameFocusRequester)
+                        .onKeyEvent { event ->
+                            val native = event.nativeKeyEvent
+                            when {
+                                native.keyCode == KeyEvent.KEYCODE_DPAD_CENTER &&
+                                    native.action == KeyEvent.ACTION_DOWN -> true
+                                (native.keyCode == KeyEvent.KEYCODE_ENTER ||
+                                    native.keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER) &&
+                                    native.action == KeyEvent.ACTION_DOWN -> {
+                                    passwordFocusRequester.requestFocus()
+                                    true
+                                }
+                                else -> false
+                            }
+                        },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                    keyboardActions = KeyboardActions(onNext = { passwordFocusRequester.requestFocus() }),
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = NuvioColors.TextPrimary),
+                    cursorBrush = SolidColor(NuvioColors.Primary),
+                    decorationBox = { innerTextField ->
+                        if (username.isBlank()) {
+                            Text(
+                                text = "Username",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = NuvioColors.TextTertiary
+                            )
+                        }
+                        innerTextField()
+                    }
+                )
             }
+        }
+
+        // Password field
+        Card(
+            onClick = { passwordFocusRequester.requestFocus() },
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.colors(
+                containerColor = NuvioColors.BackgroundElevated,
+                focusedContainerColor = NuvioColors.BackgroundElevated
+            ),
+            border = CardDefaults.border(
+                border = Border(
+                    border = BorderStroke(1.dp, NuvioColors.Border),
+                    shape = RoundedCornerShape(10.dp)
+                ),
+                focusedBorder = Border(
+                    border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                    shape = RoundedCornerShape(10.dp)
+                )
+            ),
+            shape = CardDefaults.shape(RoundedCornerShape(10.dp)),
+            scale = CardDefaults.scale(focusedScale = 1f)
+        ) {
+            Box(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
+                BasicTextField(
+                    value = password,
+                    onValueChange = { password = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(passwordFocusRequester)
+                        .onKeyEvent { event ->
+                            val native = event.nativeKeyEvent
+                            when {
+                                native.keyCode == KeyEvent.KEYCODE_DPAD_CENTER &&
+                                    native.action == KeyEvent.ACTION_DOWN -> true
+                                (native.keyCode == KeyEvent.KEYCODE_ENTER ||
+                                    native.keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER) &&
+                                    native.action == KeyEvent.ACTION_DOWN -> {
+                                    submit()
+                                    true
+                                }
+                                else -> false
+                            }
+                        },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { submit() }),
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = NuvioColors.TextPrimary),
+                    cursorBrush = SolidColor(NuvioColors.Primary),
+                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                    decorationBox = { innerTextField ->
+                        if (password.isBlank()) {
+                            Text(
+                                text = "Password",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = NuvioColors.TextTertiary
+                            )
+                        }
+                        innerTextField()
+                    }
+                )
+            }
+        }
+
+        SettingsDialogActionRow {
+            SettingsDialogActionButton(
+                text = "Cancel",
+                onClick = onDismiss
+            )
             if (currentUsername.isNotBlank()) {
-                Button(
-                    onClick = onClear,
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.colors(
-                        containerColor = NuvioColors.BackgroundCard,
-                        contentColor = NuvioColors.TextPrimary
-                    )
-                ) {
-                    Text("Clear")
-                }
+                SettingsDialogActionButton(
+                    text = "Clear",
+                    onClick = onClear
+                )
             }
+            SettingsDialogActionButton(
+                text = "Save",
+                onClick = { submit() },
+                primary = true
+            )
         }
     }
 }

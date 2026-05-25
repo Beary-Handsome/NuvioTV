@@ -71,15 +71,38 @@ class AllDebridDirectDebridResolver @Inject constructor(
             }
 
             // 3. Find the right file link from the nested files tree
-            val allLinks = flattenFileLinks(magnetInfo.files ?: emptyList())
+            var allLinks = flattenFileLinks(magnetInfo.files ?: emptyList())
+
+            // Some AD torrents have links at top level, not nested in files tree
+            if (allLinks.isEmpty()) {
+                allLinks = (magnetInfo.links ?: emptyList()).mapNotNull { link ->
+                    val l = link.link ?: return@mapNotNull null
+                    val name = link.filename?.lowercase() ?: ""
+                    val isVideo = name.endsWith(".mkv") || name.endsWith(".mp4") || name.endsWith(".avi") ||
+                        name.endsWith(".m4v") || name.endsWith(".ts") || name.endsWith(".wmv")
+                    if (isVideo || name.isBlank()) l to (link.size ?: 0L) else null
+                }
+            }
+
             if (allLinks.isEmpty()) {
                 Log.w(TAG, "No file links found")
                 return null
             }
 
-            // Pick file by index or largest video file
-            val targetLink = if (fileIdx != null && fileIdx < allLinks.size) {
-                allLinks[fileIdx]
+            // Pick file: try matching by filename from the full files list first,
+            // then fall back to largest video file. Using fileIdx directly is unreliable
+            // because allLinks is filtered to video-only files.
+            val targetLink = if (fileIdx != null) {
+                // Try to find the original filename at fileIdx from the unfiltered tree
+                val originalName = findFileNameByIndex(magnetInfo.files ?: emptyList(), fileIdx)
+                if (originalName != null) {
+                    allLinks.firstOrNull { pair ->
+                        pair.first.lowercase().contains(originalName.lowercase())
+                    } ?: allLinks.maxByOrNull { it.second }
+                } else {
+                    // fileIdx doesn't resolve to a name; pick largest
+                    allLinks.maxByOrNull { it.second }
+                }
             } else {
                 allLinks.maxByOrNull { it.second }  // largest file
             }
@@ -134,6 +157,28 @@ class AllDebridDirectDebridResolver @Inject constructor(
             Log.e(TAG, "Cache check failed: ${e.message}")
             emptyMap()
         }
+    }
+
+    /**
+     * Find the filename at a given flat index in AD's nested file tree.
+     * The index corresponds to the torrent's file numbering (all files, not just video).
+     */
+    private fun findFileNameByIndex(files: List<AllDebridFileDto>, targetIdx: Int): String? {
+        var currentIdx = 0
+        fun walk(nodes: List<AllDebridFileDto>): String? {
+            for (node in nodes) {
+                if (node.link != null || (node.entries == null && node.name != null)) {
+                    if (currentIdx == targetIdx) return node.name
+                    currentIdx++
+                }
+                node.entries?.let { children ->
+                    val found = walk(children)
+                    if (found != null) return found
+                }
+            }
+            return null
+        }
+        return walk(files)
     }
 
     /**

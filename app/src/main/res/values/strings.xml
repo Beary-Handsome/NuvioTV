@@ -1342,6 +1342,8 @@
     <string name="player_subtitle_delay">Subtitles Delay</string>
     <string name="player_error_title">Playback Error</string>
     <string name="player_go_back">Go Back</string>
+    <string name="player_retry">Retry</string>
+    <string name="player_try_next_stream">Try Next Stream</string>
     <string name="player_speed_title">Playback Speed</string>
     <string name="player_more_actions_title">More Actions</string>
     <string name="player_more_speed">Playback Speed</string>

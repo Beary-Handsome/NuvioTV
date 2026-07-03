@@ -737,6 +737,8 @@ fun PlayerScreen(
         if (uiState.error != null) {
             ErrorOverlay(
                 message = uiState.error!!,
+                onRetry = { viewModel.onEvent(PlayerEvent.OnRetry) },
+                onTryNextStream = { viewModel.onEvent(PlayerEvent.OnTryNextStream) },
                 onBack = exitPlayerFromError
             )
         }
@@ -2451,12 +2453,14 @@ private fun rememberRawSvgPainter(@RawRes iconRes: Int): Painter {
 @Composable
 private fun ErrorOverlay(
     message: String,
+    onRetry: () -> Unit,
+    onTryNextStream: () -> Unit,
     onBack: () -> Unit
 ) {
-    val exitFocusRequester = remember { FocusRequester() }
+    val tryNextStreamFocusRequester = remember { FocusRequester() }
 
     LaunchedEffect(Unit) {
-        exitFocusRequester.requestFocus()
+        tryNextStreamFocusRequester.requestFocus()
     }
 
     Box(
@@ -2490,10 +2494,20 @@ private fun ErrorOverlay(
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 DialogButton(
+                    text = stringResource(R.string.player_try_next_stream),
+                    onClick = onTryNextStream,
+                    isPrimary = true,
+                    modifier = Modifier.focusRequester(tryNextStreamFocusRequester)
+                )
+                DialogButton(
+                    text = stringResource(R.string.player_retry),
+                    onClick = onRetry,
+                    isPrimary = false
+                )
+                DialogButton(
                     text = stringResource(R.string.player_go_back),
                     onClick = onBack,
-                    isPrimary = true,
-                    modifier = Modifier.focusRequester(exitFocusRequester)
+                    isPrimary = false
                 )
             }
         }

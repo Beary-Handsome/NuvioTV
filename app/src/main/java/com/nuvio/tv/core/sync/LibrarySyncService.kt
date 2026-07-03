@@ -21,6 +21,7 @@ import javax.inject.Singleton
 private const val TAG = "LibrarySyncService"
 
 private const val PULL_PAGE_SIZE = 500
+private const val PUSH_PAGE_SIZE = 500
 
 @Singleton
 class LibrarySyncService @Inject constructor(
@@ -41,38 +42,43 @@ class LibrarySyncService @Inject constructor(
     suspend fun pushToRemote(): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             val items = libraryPreferences.getAllItems()
-            
+
             // Nothing to sync
             if (items.isEmpty()) {
                 return@withContext Result.success(Unit)
             }
 
             val profileId = profileManager.activeProfileId.value
-            val params = buildJsonObject {
-                put("p_items", buildJsonArray {
-                    items.forEach { item ->
-                        addJsonObject {
-                            put("content_id", item.id)
-                            put("content_type", item.type)
-                            put("name", item.name)
-                            put("poster", item.poster)
-                            put("poster_shape", item.posterShape.name)
-                            put("background", item.background)
-                            put("description", item.description)
-                            put("release_info", item.releaseInfo)
-                            item.imdbRating?.let { put("imdb_rating", it.toDouble()) }
-                            put("genres", buildJsonArray {
-                                item.genres.forEach { genre -> add(kotlinx.serialization.json.JsonPrimitive(genre)) }
-                            })
-                            put("addon_base_url", item.addonBaseUrl)
-                            put("added_at", item.addedAt)
+            val chunks = items.chunked(PUSH_PAGE_SIZE)
+
+            chunks.forEachIndexed { index, chunk ->
+                val params = buildJsonObject {
+                    put("p_items", buildJsonArray {
+                        chunk.forEach { item ->
+                            addJsonObject {
+                                put("content_id", item.id)
+                                put("content_type", item.type)
+                                put("name", item.name)
+                                put("poster", item.poster)
+                                put("poster_shape", item.posterShape.name)
+                                put("background", item.background)
+                                put("description", item.description)
+                                put("release_info", item.releaseInfo)
+                                item.imdbRating?.let { put("imdb_rating", it.toDouble()) }
+                                put("genres", buildJsonArray {
+                                    item.genres.forEach { genre -> add(kotlinx.serialization.json.JsonPrimitive(genre)) }
+                                })
+                                put("addon_base_url", item.addonBaseUrl)
+                                put("added_at", item.addedAt)
+                            }
                         }
-                    }
-                })
-                put("p_profile_id", profileId)
-            }
-            withJwtRefreshRetry {
-                postgrest.rpc("sync_push_library", params)
+                    })
+                    put("p_profile_id", profileId)
+                }
+                withJwtRefreshRetry {
+                    postgrest.rpc("sync_push_library", params)
+                }
+                Log.d(TAG, "Pushed library chunk ${index + 1}/${chunks.size} (${chunk.size} items) for profile $profileId")
             }
 
             Log.d(TAG, "Pushed ${items.size} library items to remote for profile $profileId")

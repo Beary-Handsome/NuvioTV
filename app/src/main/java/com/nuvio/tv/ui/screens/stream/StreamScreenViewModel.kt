@@ -305,9 +305,11 @@ class StreamScreenViewModel @Inject constructor(
                     addonStreamGroups,
                     installedAddonOrder
                 )
-                
+
                 val allStreams = orderedAddonStreams.flatMap { addonStreams ->
-                    addonStreams.streams.sortedByDescending { it.qualityValue }
+                    addonStreams.streams
+                        .filter { stream -> isContentMatch(stream) }
+                        .sortedByDescending { it.qualityValue }
                 }
                 val availableAddons = orderedAddonStreams.map { it.addonName }
                 // Auto-select only after all addons have responded or the
@@ -889,7 +891,7 @@ class StreamScreenViewModel @Inject constructor(
                     isExternal = false,
                     isTorrent = false,
                     infoHash = null,
-                    headers = null,
+                    headers = result.headers ?: basePlaybackInfo.headers,
                     filename = result.filename ?: basePlaybackInfo.filename,
                     videoSize = result.videoSize ?: basePlaybackInfo.videoSize
                 )
@@ -899,11 +901,25 @@ class StreamScreenViewModel @Inject constructor(
                 null
             }
             DirectDebridResolveResult.NotCached -> {
-                showDirectDebridPlaybackError(context.getString(R.string.debrid_not_cached), refreshStreams = false)
+                // Don't show a disruptive error — just dismiss the overlay
+                // so the user can quickly tap the next stream
+                updateUiStateIfChanged {
+                    it.copy(
+                        showDirectAutoPlayOverlay = false,
+                        directAutoPlayMessage = null,
+                        playbackErrorMessage = context.getString(R.string.debrid_not_cached)
+                    )
+                }
                 null
             }
             DirectDebridResolveResult.Stale -> {
-                showDirectDebridPlaybackError(context.getString(R.string.debrid_stale_stream), refreshStreams = true)
+                updateUiStateIfChanged {
+                    it.copy(
+                        showDirectAutoPlayOverlay = false,
+                        directAutoPlayMessage = null,
+                        playbackErrorMessage = context.getString(R.string.debrid_stale_stream)
+                    )
+                }
                 null
             }
             DirectDebridResolveResult.Error -> {
@@ -915,6 +931,43 @@ class StreamScreenViewModel @Inject constructor(
 
     fun onPlaybackErrorShown() {
         updateUiStateIfChanged { it.copy(playbackErrorMessage = null) }
+    }
+
+    /**
+     * Filter out streams whose filename clearly belongs to a different movie/show.
+     * Catches cases like "Scary Movie 4" appearing for "Scary Movie (2026)".
+     *
+     * Only filters movies (not series — series use S/E numbering which is reliable).
+     * Only filters when we have a year AND the filename contains a DIFFERENT year
+     * from the same franchise (e.g. "2006" when we want "2026").
+     */
+    private fun isContentMatch(stream: Stream): Boolean {
+        // Only apply year validation for movies, not series
+        if (contentType.lowercase() != "movie") return true
+        val expectedYear = year?.takeIf { it.length == 4 }?.toIntOrNull() ?: return true
+
+        // Get the filename or description to check
+        val filename = (stream.behaviorHints?.filename
+            ?: stream.title
+            ?: stream.description
+            ?: stream.name
+            ?: return true).lowercase()
+
+        // Extract all 4-digit years from the filename (1900-2099)
+        val yearsInFilename = Regex("(?:^|[^0-9])((?:19|20)\\d{2})(?:[^0-9]|\$)")
+            .findAll(filename)
+            .mapNotNull { it.groupValues[1].toIntOrNull() }
+            .filter { it in 1900..2099 }
+            .toList()
+
+        if (yearsInFilename.isEmpty()) return true // No year in filename — can't validate, allow
+
+        // If the filename contains the expected year, it's a match
+        if (expectedYear in yearsInFilename) return true
+
+        // If the filename contains ONLY different years, it's likely wrong content
+        // But allow if the years are within 1 year (release year can differ by region)
+        return yearsInFilename.any { kotlin.math.abs(it - expectedYear) <= 1 }
     }
 
     private fun showDirectDebridPlaybackError(message: String, refreshStreams: Boolean) {

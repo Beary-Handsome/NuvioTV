@@ -93,13 +93,14 @@ class TraktScrobbleService @Inject constructor(
         val requestBody = buildRequestBody(item, clampedProgress)
 
         var lastException: Exception? = null
-        val attempts = if (action == "stop") maxRetries + 1 else 1
+        val attempts = if (action == "stop") maxRetries + 1 else 2
 
         for (attempt in 1..attempts) {
             val response = try {
-                traktAuthService.executeAuthorizedWriteRequest { authHeader ->
+                traktAuthService.executeAuthorizedWriteRequest(bypassCircuitBreaker = true) { authHeader ->
                     when (action) {
                         "start" -> traktApi.scrobbleStart(authHeader, requestBody)
+                        "pause" -> traktApi.scrobblePause(authHeader, requestBody)
                         else -> traktApi.scrobbleStop(authHeader, requestBody)
                     }
                 }

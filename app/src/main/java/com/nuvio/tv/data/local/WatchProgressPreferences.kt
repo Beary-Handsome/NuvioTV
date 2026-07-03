@@ -539,6 +539,12 @@ class WatchProgressPreferences @Inject constructor(
     }
 
     private fun pruneOldItems(map: MutableMap<String, WatchProgress>): Map<String, WatchProgress> {
-        return map
+        val maxEntries = 500
+        if (map.size <= maxEntries) return map
+        // Keep the most recent entries by lastWatched timestamp
+        val sorted = map.entries.sortedByDescending { it.value.lastWatched }
+        val pruned = sorted.take(maxEntries).associate { it.key to it.value }
+        Log.d(TAG, "pruneOldItems: pruned ${map.size - pruned.size} entries (${map.size} → ${pruned.size})")
+        return pruned
     }
 }

@@ -7,6 +7,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.HttpDataSource
 import com.nuvio.tv.R
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -394,5 +395,73 @@ internal fun PlayerRuntimeController.tryDv7HevcFallback(
         initializePlayer(currentStreamUrl, currentHeaders, startPaused = paused)
     }
     return true
+}
+
+/**
+ * Attempts to switch to the next available stream that hasn't already failed.
+ *
+ * Marks the current stream URL as failed, then searches the source streams list
+ * for the first playable stream whose URL is not in [failedStreamUrls].
+ * If found, switches to it via [switchToSourceStream]. Otherwise, shows the
+ * error to the user.
+ *
+ * Returns `true` if a next stream was found and switching was initiated.
+ */
+internal fun PlayerRuntimeController.tryNextStream(): Boolean {
+    // Mark the current stream as failed
+    val currentUrl = currentStreamUrl
+    if (currentUrl.isNotBlank()) {
+        failedStreamUrls.add(currentUrl)
+    }
+
+    // Search available source streams for the first non-failed, playable stream
+    val allStreams = _uiState.value.sourceAllStreams
+    val nextStream = allStreams.firstOrNull { stream ->
+        val streamUrl = stream.getStreamUrl()
+        val isPlayable = !streamUrl.isNullOrBlank() || stream.isTorrent() || stream.isDirectDebrid()
+        val notFailed = streamUrl.isNullOrBlank() || streamUrl !in failedStreamUrls
+        isPlayable && notFailed && !stream.isExternal()
+    }
+
+    if (nextStream != null) {
+        Log.w(
+            PlayerRuntimeController.TAG,
+            "tryNextStream: switching to next stream (failed ${failedStreamUrls.size} so far)"
+        )
+        resetErrorRetryState()
+        _uiState.update { it.copy(error = null) }
+        switchToSourceStream(nextStream)
+        return true
+    }
+
+    // If we don't have source streams loaded yet, try loading them and then retry
+    if (allStreams.isEmpty()) {
+        Log.w(
+            PlayerRuntimeController.TAG,
+            "tryNextStream: no source streams available, loading them"
+        )
+        scope.launch {
+            loadSourceStreams(forceRefresh = false)
+            // After loading, try again with whatever arrived
+            val loadedStreams = _uiState.value.sourceAllStreams
+            val fallback = loadedStreams.firstOrNull { stream ->
+                val streamUrl = stream.getStreamUrl()
+                val isPlayable = !streamUrl.isNullOrBlank() || stream.isTorrent() || stream.isDirectDebrid()
+                val notFailed = streamUrl.isNullOrBlank() || streamUrl !in failedStreamUrls
+                isPlayable && notFailed && !stream.isExternal()
+            }
+            if (fallback != null) {
+                resetErrorRetryState()
+                _uiState.update { it.copy(error = null) }
+                switchToSourceStream(fallback)
+            }
+        }
+    }
+
+    Log.w(
+        PlayerRuntimeController.TAG,
+        "tryNextStream: no more streams available (failed ${failedStreamUrls.size})"
+    )
+    return false
 }
 

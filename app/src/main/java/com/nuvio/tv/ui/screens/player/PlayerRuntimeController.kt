@@ -358,9 +358,12 @@ class PlayerRuntimeController(
     internal var pendingAudioPcmFallbackRebuild: Boolean = false
     internal var hasTriedDv7HevcFallback: Boolean = false
     internal var forceDv7ToHevc: Boolean = false
+    internal val failedStreamUrls = mutableSetOf<String>()
+    internal var pendingBingeGroupSave: Pair<String, String>? = null
     internal var startupRetryCount: Int = 0
     internal var errorRetryCount: Int = 0
     internal var consecutiveAutoPlayCount: Int = 0
+    internal var duplicateSkipCount: Int = 0
     internal var errorRetryJob: Job? = null
     internal var stableProgressResetJob: Job? = null
     internal var currentScrobbleItem: TraktScrobbleItem? = null

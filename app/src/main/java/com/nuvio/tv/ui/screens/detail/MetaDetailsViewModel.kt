@@ -627,7 +627,7 @@ class MetaDetailsViewModel @Inject constructor(
 
                             if (preferredMeta != null) {
                                 applyMetaWithEnrichment(preferredMeta)
-                            } else if (tryApplyTmdbFallbackMeta()) {
+                            } else if (tryApplyTmdbFallbackMeta(resolvedImdbId = metaLookupId)) {
                                 Unit
                             } else {
                                 _uiState.update { it.copy(isLoading = false, error = result.message) }
@@ -656,7 +656,7 @@ class MetaDetailsViewModel @Inject constructor(
                         when (result) {
                             is NetworkResult.Success -> applyMetaWithEnrichment(result.data)
                             is NetworkResult.Error -> {
-                                if (!tryApplyTmdbFallbackMeta()) {
+                                if (!tryApplyTmdbFallbackMeta(resolvedImdbId = metaLookupId)) {
                                     _uiState.update { it.copy(isLoading = false, error = result.message) }
                                 }
                             }
@@ -670,7 +670,7 @@ class MetaDetailsViewModel @Inject constructor(
         }
     }
 
-    private suspend fun tryApplyTmdbFallbackMeta(): Boolean {
+    private suspend fun tryApplyTmdbFallbackMeta(resolvedImdbId: String? = null): Boolean {
         val tmdbId = itemId
             .takeIf { it.startsWith("tmdb:", ignoreCase = true) }
             ?.substringAfter(':')
@@ -686,6 +686,7 @@ class MetaDetailsViewModel @Inject constructor(
         ) ?: return false
         val meta = Meta(
             id = itemId,
+            imdbId = resolvedImdbId?.takeIf { it.startsWith("tt") },
             type = type,
             rawType = itemType,
             name = enrichment.localizedTitle ?: enrichment.originalTitle ?: "TMDB $tmdbId",
@@ -2321,7 +2322,9 @@ class MetaDetailsViewModel @Inject constructor(
             ?.groupValues
             ?.getOrNull(1)
             ?.toIntOrNull()
-        val parsedIds = parseContentIds(id)
+        val parsedIds = parseContentIds(id).let { p ->
+            if (p.imdb == null && !imdbId.isNullOrBlank()) p.copy(imdb = imdbId) else p
+        }
         return LibraryEntryInput(
             itemId = id,
             itemType = apiType,
@@ -2624,5 +2627,7 @@ class MetaDetailsViewModel @Inject constructor(
         idleTimerJob?.cancel()
         trailerFetchJob?.cancel()
         nextToWatchJob?.cancel()
+        moreLikeThisJob?.cancel()
+        collectionJob?.cancel()
     }
 }

@@ -32,9 +32,14 @@ object StreamAutoPlaySelector {
 
     private fun isPlayable(stream: Stream): Boolean {
         when (stream.debridCacheStatus?.state) {
-            StreamDebridCacheState.CHECKING,
             StreamDebridCacheState.NOT_CACHED,
             StreamDebridCacheState.UNKNOWN -> return false
+            StreamDebridCacheState.CHECKING -> {
+                // Don't block auto-play for streams that are already resolvable
+                // without the cache check result (direct URL or direct debrid).
+                // Only block torrents that truly need the cache check to complete.
+                if (stream.getStreamUrl() == null && !stream.isDirectDebrid()) return false
+            }
             StreamDebridCacheState.CACHED,
             null -> Unit
         }

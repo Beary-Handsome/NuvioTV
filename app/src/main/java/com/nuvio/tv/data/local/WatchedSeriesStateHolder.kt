@@ -61,6 +61,7 @@ class WatchedSeriesStateHolder @Inject constructor(
         loaded = true
     }
 
+    @Synchronized
     fun update(ids: Set<String>) {
         _fullyWatchedSeriesIds.value = ids
         scope.launch {

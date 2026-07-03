@@ -147,6 +147,7 @@ internal fun PlayerRuntimeController.startProgressUpdates() {
                         firstFrameReady = pos > 0L || (playingNow && !cacheBuffering && playerDuration > 0L)
                         if (firstFrameReady) {
                             hasRenderedFirstFrame = true
+                            commitPendingBingeGroupSave()
                         }
                     }
                     if (playerDuration > lastKnownDuration) {
@@ -441,13 +442,17 @@ internal fun PlayerRuntimeController.emitPauseScrobbleStop(progressPercent: Floa
     if (!hasRequestedScrobbleStartForCurrentItem) return
 
     scope.launch(kotlinx.coroutines.NonCancellable) {
-        traktScrobbleService.scrobbleStop(
+        traktScrobbleService.scrobblePause(
             item = item,
             progressPercent = progressPercent
         )
     }
     scrobbleStartRequestGeneration++
-    hasRequestedScrobbleStartForCurrentItem = false
+    // Do NOT reset hasRequestedScrobbleStartForCurrentItem here.
+    // Resetting it during pause causes the stop guard in emitScrobbleStop
+    // to block the stop scrobble after a pause-resume-exit sequence when
+    // progress is below 80%. The flag is only reset on content switch
+    // (refreshScrobbleItem) or on an actual stop scrobble.
     hasSentScrobbleStartForCurrentItem = false
 }
 
@@ -650,11 +655,15 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
                     if (player.isPlaying) {
                         userPausedManually = true
                         player.pause()
+                        stopWatchProgressSaving()
+                        emitStopScrobbleForCurrentProgress()
                         schedulePauseOverlay()
                     } else {
                         userPausedManually = false
                         cancelPauseOverlay()
                         player.play()
+                        startWatchProgressSaving()
+                        emitScrobbleStart()
                     }
                 }
             }
@@ -1081,6 +1090,11 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
             } else {
                 releasePlayer()
                 initializePlayer(currentStreamUrl, currentHeaders)
+            }
+        }
+        PlayerEvent.OnTryNextStream -> {
+            if (!tryNextStream()) {
+                // No streams available — keep the current error visible
             }
         }
         PlayerEvent.OnParentalGuideHide -> {

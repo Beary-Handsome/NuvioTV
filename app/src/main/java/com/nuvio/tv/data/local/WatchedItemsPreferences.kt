@@ -148,17 +148,25 @@ class WatchedItemsPreferences @Inject constructor(
     suspend fun mergeRemoteItems(remoteItems: List<WatchedItem>) {
         store().edit { preferences ->
             val current = preferences[watchedItemsKey] ?: emptySet()
-            val localItems = current.mapNotNull { json ->
-                runCatching { gson.fromJson(json, WatchedItem::class.java) }.getOrNull()
-            }
-            val localKeys = localItems.map { Triple(it.contentId, it.season, it.episode) }.toSet()
-
-            val newItems = remoteItems.filter { remote ->
-                Triple(remote.contentId, remote.season, remote.episode) !in localKeys
+            val localByKey = mutableMapOf<Triple<String, Int?, Int?>, WatchedItem>()
+            current.forEach { json ->
+                runCatching { gson.fromJson(json, WatchedItem::class.java) }.getOrNull()?.let { item ->
+                    localByKey[Triple(item.contentId, item.season, item.episode)] = item
+                }
             }
 
-            if (newItems.isNotEmpty()) {
-                preferences[watchedItemsKey] = current + newItems.map { gson.toJson(it) }.toSet()
+            var changed = false
+            remoteItems.forEach { remote ->
+                val key = Triple(remote.contentId, remote.season, remote.episode)
+                val local = localByKey[key]
+                if (local == null || remote.watchedAt > local.watchedAt) {
+                    localByKey[key] = remote
+                    changed = true
+                }
+            }
+
+            if (changed) {
+                preferences[watchedItemsKey] = localByKey.values.map { gson.toJson(it) }.toSet()
             }
         }
     }

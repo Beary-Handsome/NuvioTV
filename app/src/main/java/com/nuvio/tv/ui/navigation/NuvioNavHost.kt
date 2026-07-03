@@ -40,8 +40,6 @@ import com.nuvio.tv.ui.screens.settings.TraktScreen
 import com.nuvio.tv.ui.screens.settings.TmdbSettingsScreen
 import com.nuvio.tv.ui.screens.stream.StreamScreen
 import com.nuvio.tv.ui.screens.home.ContinueWatchingItem
-import com.nuvio.tv.ui.screens.account.AuthSignInScreen
-import com.nuvio.tv.ui.screens.account.AuthQrSignInScreen
 import com.nuvio.tv.ui.screens.cast.CastDetailScreen
 import com.nuvio.tv.ui.screens.profile.ProfileSelectionMode
 import com.nuvio.tv.ui.screens.profile.ProfileSelectionScreen
@@ -976,7 +974,19 @@ fun NuvioNavHost(
         }
 
         composable(Screen.Discover.route) {
+            // Share the SearchViewModel from the Search back stack entry so
+            // Discover and Search operate on the same state (watched IDs,
+            // poster options, discover filters, etc.).
+            val searchBackStackEntry = androidx.compose.runtime.remember {
+                try { navController.getBackStackEntry(Screen.Search.route) } catch (_: Exception) { null }
+            }
+            val sharedViewModel: com.nuvio.tv.ui.screens.search.SearchViewModel? =
+                if (searchBackStackEntry != null) {
+                    androidx.hilt.navigation.compose.hiltViewModel<com.nuvio.tv.ui.screens.search.SearchViewModel>(searchBackStackEntry)
+                } else null
+
             DiscoverScreen(
+                viewModel = sharedViewModel ?: androidx.hilt.navigation.compose.hiltViewModel(),
                 showBuiltInHeader = !hideBuiltInHeaders,
                 onNavigateToDetail = { itemId, itemType, addonBaseUrl ->
                     navController.navigate(Screen.Detail.createRoute(itemId, itemType, addonBaseUrl))
@@ -1015,7 +1025,6 @@ fun NuvioNavHost(
                 showBuiltInHeader = !hideBuiltInHeaders,
                 onNavigateToTrakt = { navController.navigate(Screen.Trakt.route) },
                 onNavigateToAddons = { navController.navigate(Screen.AddonManager.route) },
-                onNavigateToAuthQrSignIn = { navController.navigate(Screen.AuthQrSignIn.route) },
                 onNavigateToManageProfiles = { navController.navigate(Screen.ManageProfiles.route) },
                 onNavigateToSupportersContributors = {
                     navController.navigate(Screen.SupportersContributors.route)
@@ -1141,26 +1150,6 @@ fun NuvioNavHost(
                     onBackPress = { navController.popBackStack() }
                 )
             }
-        }
-
-        composable(Screen.Account.route) {
-            AuthQrSignInScreen(
-                onBackPress = { navController.popBackStack() }
-            )
-        }
-
-        composable(Screen.AuthSignIn.route) {
-            AuthSignInScreen(
-                onBackPress = { navController.popBackStack() },
-                onNavigateToQrSignIn = { navController.navigate(Screen.AuthQrSignIn.route) },
-                onSuccess = { navController.popBackStack() }
-            )
-        }
-
-        composable(Screen.AuthQrSignIn.route) {
-            AuthQrSignInScreen(
-                onBackPress = { navController.popBackStack() }
-            )
         }
 
         composable(Screen.LayoutSettings.route) {

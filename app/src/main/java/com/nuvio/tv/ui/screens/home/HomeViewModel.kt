@@ -167,7 +167,7 @@ class HomeViewModel @Inject constructor(
     internal var catalogUpdateJob: Job? = null
     internal var hasRenderedFirstCatalog = false
     internal val catalogLoadSemaphore = Semaphore(MAX_CATALOG_LOAD_CONCURRENCY)
-    internal var pendingCatalogLoads = 0
+    internal val pendingCatalogLoads = java.util.concurrent.atomic.AtomicInteger(0)
     internal val activeCatalogLoadJobs = mutableSetOf<Job>()
     internal var activeCatalogLoadSignature: String? = null
     internal var catalogLoadGeneration: Long = 0L
@@ -676,9 +676,9 @@ class HomeViewModel @Inject constructor(
                 }
                 // During bulk loading, batch aggressively — placeholders are
                 // already visible so the user won't notice the delay.
-                pendingCatalogLoads > 8 -> 300L
-                pendingCatalogLoads > 3 -> 250L
-                pendingCatalogLoads > 0 -> 200L
+                pendingCatalogLoads.get() > 8 -> 300L
+                pendingCatalogLoads.get() > 3 -> 250L
+                pendingCatalogLoads.get() > 0 -> 200L
                 else -> 80L
             }
             delay(debounceMs)
@@ -696,7 +696,7 @@ class HomeViewModel @Inject constructor(
         } ?: return
         val (addon, catalog) = pair
         val generation = catalogLoadGeneration
-        pendingCatalogLoads = (pendingCatalogLoads + 1)
+        pendingCatalogLoads.incrementAndGet()
         loadCatalogPipeline(addon, catalog, generation)
     }
 
@@ -715,7 +715,7 @@ class HomeViewModel @Inject constructor(
         pending.forEach { (key, pair) ->
             if (lazyLoadRequestedKeys.add(key)) {
                 val (addon, catalog) = pair
-                pendingCatalogLoads = (pendingCatalogLoads + 1)
+                pendingCatalogLoads.incrementAndGet()
                 loadCatalogPipeline(addon, catalog, generation)
             }
         }

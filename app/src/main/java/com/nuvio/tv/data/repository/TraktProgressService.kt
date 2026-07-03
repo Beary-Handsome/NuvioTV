@@ -222,7 +222,7 @@ class TraktProgressService @Inject constructor(
     private val watchedMoviesFetchThrottleMs = 15_000L
     private val episodeProgressCacheTtlMs = 5 * 60_000L
     private val episodeProgressFetchThrottleMs = 15_000L
-    private val optimisticTtlMs = 3 * 60_000L
+    private val optimisticTtlMs = 10 * 60_000L
     private val initialMetadataHydrationDelayMs = 3_000L
     private val maxRecentEpisodeHistoryEntries = 300
     private val metadataHydrationLimit = 110
@@ -2617,7 +2617,7 @@ class TraktProgressService @Inject constructor(
 
         for (type in typeCandidates) {
             for (candidateId in idCandidates) {
-                val result = withTimeoutOrNull(3500) {
+                val result = withTimeoutOrNull(8000) {
                     metaRepository.getMetaFromAllAddons(type = type, id = candidateId)
                         .first { it !is NetworkResult.Loading }
                 } ?: continue

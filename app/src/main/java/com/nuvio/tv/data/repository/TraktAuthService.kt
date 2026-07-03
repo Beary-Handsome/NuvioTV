@@ -51,7 +51,7 @@ class TraktAuthService @Inject constructor(
 
     @Volatile private var circuitOpenUntilMs = 0L
     private val circuitFailures = AtomicInteger(0)
-    private val circuitBaseCooldownMs = 5 * 60_000L
+    private val circuitBaseCooldownMs = 60_000L
     private val circuitMaxCooldownMs = 60 * 60_000L
 
     private val rateLimitWindowMs = 5 * 60_000L
@@ -335,9 +335,10 @@ class TraktAuthService @Inject constructor(
     }
 
     suspend fun <T> executeAuthorizedRequest(
+        bypassCircuitBreaker: Boolean = false,
         call: suspend (authorizationHeader: String) -> Response<T>
     ): Response<T>? {
-        if (isCircuitOpen()) {
+        if (!bypassCircuitBreaker && isCircuitOpen()) {
             trace("authorized request: circuit breaker is OPEN, skipping request")
             return null
         }
@@ -480,6 +481,7 @@ class TraktAuthService @Inject constructor(
     }
 
     suspend fun <T> executeAuthorizedWriteRequest(
+        bypassCircuitBreaker: Boolean = false,
         call: suspend (authorizationHeader: String) -> Response<T>
     ): Response<T>? {
         writeRequestMutex.withLock {
@@ -488,7 +490,7 @@ class TraktAuthService @Inject constructor(
             if (waitMs > 0L) delay(waitMs)
             lastWriteRequestAtMs = System.currentTimeMillis()
         }
-        return executeAuthorizedRequest(call)
+        return executeAuthorizedRequest(bypassCircuitBreaker = bypassCircuitBreaker, call = call)
     }
 
     private suspend fun getValidAccessToken(): String? {

@@ -479,6 +479,7 @@ internal fun PlayerRuntimeController.initializePlayer(
                                     // Tunneled mode — onRenderedFirstFrame() won't
                                     // fire; treat STATE_READY as the sync point.
                                     hasRenderedFirstFrame = true
+                                    commitPendingBingeGroupSave()
                                     if (!startPaused && !userPausedManually) {
                                         playWhenReady = true
                                         play()
@@ -551,6 +552,9 @@ internal fun PlayerRuntimeController.initializePlayer(
                     override fun onRenderedFirstFrame() {
                         hasRenderedFirstFrame = true
                         updateAudioControlAvailability()
+                        // Commit deferred binge group cache now that
+                        // playback is verified to work.
+                        commitPendingBingeGroupSave()
                         // Start playback now that the first video frame is
                         // visible: audio and video begin in sync.
                         if (!startPaused && !userPausedManually) {
@@ -598,12 +602,15 @@ internal fun PlayerRuntimeController.initializePlayer(
                             return
                         }
 
-                        val responseCode = error.findInvalidResponseCodeException()?.responseCode
+                        val httpException = error.findInvalidResponseCodeException()
+                        val responseCode = httpException?.responseCode
                         if (responseCode == 416 && !hasRetriedCurrentStreamAfter416) {
                             retryCurrentStreamFromStartAfter416()
                             return
                         }
-                        if (maybeAutoSwitchInternalPlayerOnStartupError(
+                        // Skip engine failover for HTTP errors — changing the
+                        // engine won't fix a 403/404/502 from the server.
+                        if (httpException == null && maybeAutoSwitchInternalPlayerOnStartupError(
                                 detailedError = detailedError,
                                 allowEngineFailover = allowEngineFailover
                             )
@@ -621,6 +628,20 @@ internal fun PlayerRuntimeController.initializePlayer(
                             return
                         }
                         if (hasRenderedFirstFrame && attemptAutoRetry(error, detailedError)) {
+                            return
+                        }
+                        // Clear any pending binge group save on error and
+                        // invalidate any existing cache entry for this content
+                        // so binge-matching won't keep picking this broken source.
+                        pendingBingeGroupSave = null
+                        contentId?.let { cid ->
+                            scope.launch(kotlinx.coroutines.NonCancellable) {
+                                bingeGroupCacheDataStore.remove(cid)
+                            }
+                        }
+                        // Try switching to the next available stream before
+                        // showing the error to the user.
+                        if (tryNextStream()) {
                             return
                         }
                         _uiState.update {

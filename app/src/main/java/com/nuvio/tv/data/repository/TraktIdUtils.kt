@@ -18,7 +18,7 @@ internal fun parseContentIds(contentId: String?): ParsedContentIds {
     }
 
     if (raw.startsWith("tmdb:", ignoreCase = true)) {
-        return ParsedContentIds(tmdb = raw.substringAfter(':').toIntOrNull())
+        return ParsedContentIds(tmdb = raw.substringAfter(':').substringBefore(':').toIntOrNull())
     }
 
     if (raw.startsWith("trakt:", ignoreCase = true)) {
@@ -62,9 +62,9 @@ internal fun extractYear(value: String?): Int? {
 }
 
 internal fun parseIsoToMillis(value: String?): Long {
-    if (value.isNullOrBlank()) return System.currentTimeMillis()
+    if (value.isNullOrBlank()) return 0L
     return runCatching { Instant.parse(value).toEpochMilli() }
-        .getOrElse { System.currentTimeMillis() }
+        .getOrElse { 0L }
 }
 
 internal fun toTraktIds(ids: ParsedContentIds): TraktIdsDto {

@@ -57,7 +57,7 @@ class LibraryRepositoryImpl @Inject constructor(
     var isSyncingFromRemote: Boolean
         get() = _isSyncingFromRemote.value
         set(value) { _isSyncingFromRemote.value = value }
-    var hasCompletedInitialPull = false
+    @Volatile var hasCompletedInitialPull = false
 
     private fun triggerRemoteSync() {
         // Skip if already syncing from remote, initial pull not complete, or not authenticated
@@ -115,6 +115,11 @@ class LibraryRepositoryImpl @Inject constructor(
                             addonBaseUrl = saved.addonBaseUrl,
                             listedAt = saved.addedAt
                         )
+                    }
+                }.onEach { entries ->
+                    val unhydrated = entries.filter { it.logo == null && it.id !in hydratedLogoIds }
+                    if (unhydrated.isNotEmpty()) {
+                        syncScope.launch { hydrateLibraryLogos(unhydrated) }
                     }
                 }
             }

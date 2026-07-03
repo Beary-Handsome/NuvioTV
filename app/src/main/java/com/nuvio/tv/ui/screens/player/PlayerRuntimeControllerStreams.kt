@@ -402,14 +402,29 @@ private fun PlayerRuntimeController.applyStreamMetadata(stream: Stream) {
     currentVideoHeight = null
     currentVideoBitrate = null
 
-    // Persist binge group per content so subsequent episode plays
-    // (from CW, Details, or next-episode) can reuse the same source group.
+    // Defer binge group cache persistence until playback is verified
+    // (first frame rendered). Saving immediately would pollute the cache
+    // with entries for streams that fail to play, causing subsequent
+    // binge-matching to pick the same broken source.
     val bg = stream.behaviorHints?.bingeGroup
     val cid = contentId
     if (bg != null && cid != null) {
-        scope.launch(kotlinx.coroutines.NonCancellable) {
-            bingeGroupCacheDataStore.save(cid, bg)
-        }
+        pendingBingeGroupSave = Pair(cid, bg)
+    } else {
+        pendingBingeGroupSave = null
+    }
+}
+
+/**
+ * Commits the pending binge group save that was deferred from [applyStreamMetadata].
+ * Call this once playback is confirmed (first frame rendered or tunneled-mode
+ * STATE_READY) so only successfully playing streams update the binge group cache.
+ */
+internal fun PlayerRuntimeController.commitPendingBingeGroupSave() {
+    val (cid, bg) = pendingBingeGroupSave ?: return
+    pendingBingeGroupSave = null
+    scope.launch(kotlinx.coroutines.NonCancellable) {
+        bingeGroupCacheDataStore.save(cid, bg)
     }
 }
 
@@ -1245,6 +1260,8 @@ internal suspend fun PlayerRuntimeController.resolveDirectDebridStreamIfNeeded(
     }
 }
 
+private const val MAX_DUPLICATE_SKIPS = 3
+
 internal fun PlayerRuntimeController.playNextEpisode(userInitiated: Boolean = false) {
     val nextVideo = nextEpisodeVideo ?: return
     val type = contentType ?: return
@@ -1464,10 +1481,57 @@ internal fun PlayerRuntimeController.playNextEpisode(userInitiated: Boolean = fa
                 }
             }
 
-            val streamToPlay = selectedStream?.let {
-                resolveDirectDebridStreamIfNeeded(it, nextVideo.season, nextVideo.episode)
+            // Try resolving the selected stream; if it fails (not cached, stale),
+            // try the next streams from the list before giving up
+            val picked = selectedStream
+            var streamToPlay: Stream? = null
+            if (picked != null) {
+                streamToPlay = resolveDirectDebridStreamIfNeeded(picked, nextVideo.season, nextVideo.episode)
+                if (streamToPlay == null && lastSuccessData != null) {
+                    // First pick failed — try remaining streams
+                    val orderedStreams = StreamAutoPlaySelector.orderAddonStreams(lastSuccessData!!, installedAddonOrder)
+                    val allStreams = orderedStreams.flatMap { it.streams }
+                    for (fallback in allStreams) {
+                        if (fallback == picked) continue
+                        val resolved = resolveDirectDebridStreamIfNeeded(fallback, nextVideo.season, nextVideo.episode)
+                        if (resolved != null) {
+                            streamToPlay = resolved
+                            break
+                        }
+                    }
+                }
+            }
+            // Skip duplicate file — paired episodes (e.g. S01E01E02) resolve
+            // to the same URL for both E01 and E02. If the next episode's
+            // resolved file matches what's currently playing, skip it and
+            // save watch progress so the episode is marked as watched.
+            if (streamToPlay != null) {
+                val nextFile = streamToPlay.behaviorHints?.filename
+                    ?: streamToPlay.getStreamUrl()
+                val currentFile = currentFilename
+                    ?: currentStreamUrl
+                if (nextFile != null && currentFile != null &&
+                    nextFile.equals(currentFile, ignoreCase = true) &&
+                    duplicateSkipCount < MAX_DUPLICATE_SKIPS
+                ) {
+                    // Same file — mark episode as complete and skip to the one after
+                    duplicateSkipCount++
+                    saveWatchProgress()
+                    _uiState.update { it.copy(postPlayMode = null) }
+                    nextEpisodeVideo = _uiState.value.episodes
+                        .firstOrNull { ep ->
+                            ep.season == nextVideo.season &&
+                                ep.episode != null && nextVideo.episode != null &&
+                                ep.episode == nextVideo.episode + 1
+                        }
+                    if (nextEpisodeVideo != null) {
+                        playNextEpisode(userInitiated = userInitiated)
+                    }
+                    return@launch
+                }
             }
             if (streamToPlay != null) {
+                duplicateSkipCount = 0 // Reset skip counter on successful play
                 val sourceName = (streamToPlay.name?.takeIf { it.isNotBlank() } ?: streamToPlay.addonName).trim()
                 for (remaining in 3 downTo 1) {
                     _uiState.update { current ->

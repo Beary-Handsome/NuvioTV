@@ -308,7 +308,27 @@ class WatchProgressSyncService @Inject constructor(
 
             val normalized = normalizePulledEntries(pulled)
             Log.d(TAG, "pullFromRemote: normalized ${pulled.size} -> ${normalized.size} entries")
-            Result.success(normalized)
+
+            // Preserve local display metadata (name, poster, backdrop, logo) that
+            // the remote schema doesn't store — prevents pulled entries from
+            // overwriting local entries with empty display fields.
+            val localEntries = watchProgressPreferences.getAllRawEntries(profileId)
+            val enriched = normalized.map { (key, remote) ->
+                val local = localEntries[key]
+                if (local != null) {
+                    key to remote.copy(
+                        name = remote.name.takeIf { it.isNotBlank() } ?: local.name,
+                        poster = remote.poster ?: local.poster,
+                        backdrop = remote.backdrop ?: local.backdrop,
+                        logo = remote.logo ?: local.logo,
+                        episodeTitle = remote.episodeTitle ?: local.episodeTitle
+                    )
+                } else {
+                    key to remote
+                }
+            }
+            Log.d(TAG, "pullFromRemote: enriched ${enriched.size} entries with local display metadata")
+            Result.success(enriched)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to pull watch progress from remote", e)
             Result.failure(e)

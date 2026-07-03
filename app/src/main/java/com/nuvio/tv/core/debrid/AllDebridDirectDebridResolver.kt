@@ -3,6 +3,7 @@ package com.nuvio.tv.core.debrid
 import android.util.Log
 import com.nuvio.tv.data.remote.api.AllDebridApi
 import com.nuvio.tv.data.remote.dto.AllDebridFileDto
+import kotlinx.coroutines.withTimeout
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -55,83 +56,113 @@ class AllDebridDirectDebridResolver @Inject constructor(
                 return null
             }
 
-            // 2. Get status
-            val statusResponse = allDebridApi.magnetStatus(
-                apiKey = apiKey,
-                magnetId = magnetId.toString()
-            )
-            if (!statusResponse.isSuccessful) {
-                Log.w(TAG, "Status check failed: ${statusResponse.code()}")
-                return null
-            }
-            val magnetInfo = statusResponse.body()?.data?.magnets
-            if (magnetInfo == null || magnetInfo.statusCode != 4) {
-                Log.w(TAG, "Torrent not ready: status=${magnetInfo?.status} code=${magnetInfo?.statusCode}")
-                return null
-            }
+            var resolved = false
+            try {
+                return withTimeout(30_000L) {
+                    // 2. Poll for status — AD may need time to process
+                    var magnetInfo: com.nuvio.tv.data.remote.dto.AllDebridMagnetInfoDto? = null
+                    for (attempt in 1..15) {
+                        val statusResponse = allDebridApi.magnetStatus(
+                            apiKey = apiKey,
+                            magnetId = magnetId.toString()
+                        )
+                        if (!statusResponse.isSuccessful) {
+                            Log.w(TAG, "Status check failed: ${statusResponse.code()}")
+                            return@withTimeout null
+                        }
+                        magnetInfo = statusResponse.body()?.data?.magnets
+                        if (magnetInfo?.statusCode == 4) break
+                        // Give up on terminal errors
+                        val code = magnetInfo?.statusCode ?: -1
+                        if (code in listOf(5, 6, 7, 8, 9, 10, 11)) {
+                            Log.w(TAG, "Torrent failed: status=${magnetInfo?.status} code=$code")
+                            return@withTimeout null
+                        }
+                        if (attempt < 15) {
+                            kotlinx.coroutines.delay(when {
+                                attempt <= 5 -> 1000L
+                                else -> 2000L
+                            })
+                        }
+                    }
+                    if (magnetInfo == null || magnetInfo!!.statusCode != 4) {
+                        Log.w(TAG, "Torrent not ready after polling: status=${magnetInfo?.status}")
+                        return@withTimeout null
+                    }
 
-            // 3. Find the right file link from the nested files tree
-            var allLinks = flattenFileLinks(magnetInfo.files ?: emptyList())
+                    // 3. Find the right file link from the nested files tree
+                    var allLinks = flattenFileLinks(magnetInfo.files ?: emptyList())
 
-            // Some AD torrents have links at top level, not nested in files tree
-            if (allLinks.isEmpty()) {
-                allLinks = (magnetInfo.links ?: emptyList()).mapNotNull { link ->
-                    val l = link.link ?: return@mapNotNull null
-                    val name = link.filename?.lowercase() ?: ""
-                    val isVideo = name.endsWith(".mkv") || name.endsWith(".mp4") || name.endsWith(".avi") ||
-                        name.endsWith(".m4v") || name.endsWith(".ts") || name.endsWith(".wmv")
-                    if (isVideo || name.isBlank()) l to (link.size ?: 0L) else null
+                    // Some AD torrents have links at top level, not nested in files tree
+                    if (allLinks.isEmpty()) {
+                        allLinks = (magnetInfo.links ?: emptyList()).mapNotNull { link ->
+                            val l = link.link ?: return@mapNotNull null
+                            val name = link.filename?.lowercase() ?: ""
+                            val isVideo = name.endsWith(".mkv") || name.endsWith(".mp4") || name.endsWith(".avi") ||
+                                name.endsWith(".m4v") || name.endsWith(".ts") || name.endsWith(".wmv")
+                            if (isVideo || name.isBlank()) l to (link.size ?: 0L) else null
+                        }
+                    }
+
+                    if (allLinks.isEmpty()) {
+                        Log.w(TAG, "No file links found")
+                        return@withTimeout null
+                    }
+
+                    // Pick file: try matching by filename from the full files list first,
+                    // then fall back to largest video file. Using fileIdx directly is unreliable
+                    // because allLinks is filtered to video-only files.
+                    val targetLink = if (fileIdx != null) {
+                        // Try to find the original filename at fileIdx from the unfiltered tree
+                        val originalName = findFileNameByIndex(magnetInfo.files ?: emptyList(), fileIdx)
+                        if (originalName != null) {
+                            allLinks.firstOrNull { pair ->
+                                pair.first.lowercase().contains(originalName.lowercase())
+                            } ?: allLinks.maxByOrNull { it.second }
+                        } else {
+                            // fileIdx doesn't resolve to a name; pick largest
+                            allLinks.maxByOrNull { it.second }
+                        }
+                    } else {
+                        allLinks.maxByOrNull { it.second }  // largest file
+                    }
+
+                    if (targetLink == null) {
+                        Log.w(TAG, "No suitable file found")
+                        return@withTimeout null
+                    }
+
+                    // 4. Unlock the link to get the streamable URL
+                    val unlockResponse = allDebridApi.unlockLink(
+                        apiKey = apiKey,
+                        link = targetLink.first
+                    )
+                    if (!unlockResponse.isSuccessful) {
+                        Log.w(TAG, "Unlock failed: ${unlockResponse.code()}")
+                        return@withTimeout null
+                    }
+
+                    val downloadUrl = unlockResponse.body()?.data?.link
+                        ?: unlockResponse.body()?.data?.download
+
+                    if (downloadUrl.isNullOrBlank()) {
+                        Log.w(TAG, "No download URL from unlock")
+                        return@withTimeout null
+                    }
+
+                    Log.d(TAG, "Resolved $infoHash → $downloadUrl")
+                    resolved = true
+                    downloadUrl
+                }
+            } finally {
+                if (!resolved) {
+                    runCatching {
+                        allDebridApi.deleteMagnet(apiKey = apiKey, magnetId = magnetId.toString())
+                    }.onFailure { e ->
+                        Log.w(TAG, "Failed to delete orphan magnet $magnetId: ${e.message}")
+                    }
                 }
             }
-
-            if (allLinks.isEmpty()) {
-                Log.w(TAG, "No file links found")
-                return null
-            }
-
-            // Pick file: try matching by filename from the full files list first,
-            // then fall back to largest video file. Using fileIdx directly is unreliable
-            // because allLinks is filtered to video-only files.
-            val targetLink = if (fileIdx != null) {
-                // Try to find the original filename at fileIdx from the unfiltered tree
-                val originalName = findFileNameByIndex(magnetInfo.files ?: emptyList(), fileIdx)
-                if (originalName != null) {
-                    allLinks.firstOrNull { pair ->
-                        pair.first.lowercase().contains(originalName.lowercase())
-                    } ?: allLinks.maxByOrNull { it.second }
-                } else {
-                    // fileIdx doesn't resolve to a name; pick largest
-                    allLinks.maxByOrNull { it.second }
-                }
-            } else {
-                allLinks.maxByOrNull { it.second }  // largest file
-            }
-
-            if (targetLink == null) {
-                Log.w(TAG, "No suitable file found")
-                return null
-            }
-
-            // 4. Unlock the link to get the streamable URL
-            val unlockResponse = allDebridApi.unlockLink(
-                apiKey = apiKey,
-                link = targetLink.first
-            )
-            if (!unlockResponse.isSuccessful) {
-                Log.w(TAG, "Unlock failed: ${unlockResponse.code()}")
-                return null
-            }
-
-            val downloadUrl = unlockResponse.body()?.data?.link
-                ?: unlockResponse.body()?.data?.download
-
-            if (downloadUrl.isNullOrBlank()) {
-                Log.w(TAG, "No download URL from unlock")
-                return null
-            }
-
-            Log.d(TAG, "Resolved $infoHash → $downloadUrl")
-            return downloadUrl
 
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e

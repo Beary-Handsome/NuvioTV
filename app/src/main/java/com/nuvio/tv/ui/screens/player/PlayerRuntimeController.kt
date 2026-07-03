@@ -470,6 +470,8 @@ class PlayerRuntimeController(
     internal var pendingAudioPcmFallbackRebuild: Boolean = false
     internal var hasTriedDv7HevcFallback: Boolean = false
     internal var forceDv7ToHevc: Boolean = false
+    internal val failedStreamUrls = mutableSetOf<String>()
+    internal var pendingBingeGroupSave: Pair<String, String>? = null
     internal var startupRetryCount: Int = 0
     internal var parsingErrorProbeAttempted: Boolean = false
     internal var hasRetriedCurrentStreamAfterUnexpectedNpe: Boolean = false
@@ -477,6 +479,7 @@ class PlayerRuntimeController(
     internal var timeoutRecoveryAttempts: Int = 0
     internal var errorRetryCount: Int = 0
     internal var consecutiveAutoPlayCount: Int = 0
+    internal var duplicateSkipCount: Int = 0
     internal var errorRetryJob: Job? = null
     internal var stableProgressResetJob: Job? = null
     @Volatile internal var currentPlayerSettingsForReport: PlayerSettings = PlayerSettings()

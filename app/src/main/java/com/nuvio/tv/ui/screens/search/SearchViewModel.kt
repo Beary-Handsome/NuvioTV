@@ -101,6 +101,17 @@ class SearchViewModel @Inject constructor(
 
         const val MAX_SUGGESTIONS = 8
         const val MAX_RECENT_SEARCHES = 8
+        val DEFAULT_MOVIE_GENRES = listOf(
+            "Action", "Adventure", "Animation", "Comedy", "Crime",
+            "Documentary", "Drama", "Family", "Fantasy", "History",
+            "Horror", "Music", "Mystery", "Romance", "Science Fiction",
+            "Thriller", "War", "Western"
+        )
+        val DEFAULT_TV_GENRES = listOf(
+            "Action & Adventure", "Animation", "Comedy", "Crime",
+            "Documentary", "Drama", "Family", "Kids", "Mystery",
+            "Reality", "Sci-Fi & Fantasy", "Talk", "War & Politics", "Western"
+        )
     }
 
     init {
@@ -789,10 +800,17 @@ class SearchViewModel @Inject constructor(
                         catalog.extra.any { it.name.equals("search", ignoreCase = true) && it.isRequired })
                 }
                 .map { catalog ->
-                    val genres = catalog.extra
+                    val structuredGenres = catalog.extra
                         .firstOrNull { it.name.equals("genre", ignoreCase = true) }
                         ?.options
                         .orEmpty()
+                    val genres = structuredGenres.ifEmpty {
+                        if (catalog.extraSupported.any { it.equals("genre", ignoreCase = true) }) {
+                            defaultGenresForType(catalog.apiType)
+                        } else {
+                            emptyList()
+                        }
+                    }
                     DiscoverCatalog(
                         key = "${addon.id}_${catalog.apiType}_${catalog.id}",
                         addonId = addon.id,
@@ -1054,4 +1072,12 @@ class SearchViewModel @Inject constructor(
     private fun catalogKey(addonId: String, addonBaseUrl: String, type: String, catalogId: String): String {
         return catalogRowStableKey(addonId, addonBaseUrl, type, catalogId)
     }
+
+    private fun defaultGenresForType(apiType: String): List<String> {
+        return when (apiType.lowercase()) {
+            "movie" -> DEFAULT_MOVIE_GENRES
+            else -> DEFAULT_TV_GENRES
+        }
+    }
+
 }

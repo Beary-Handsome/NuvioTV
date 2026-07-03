@@ -331,7 +331,7 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
         )
 
         val eagerCatalogs = eagerHomeCatalogs + heroOnlyCatalogs
-        pendingCatalogLoads = eagerCatalogs.size
+        pendingCatalogLoads.set(eagerCatalogs.size)
         eagerCatalogs.forEach { (addon, catalog) ->
             loadCatalogPipeline(addon, catalog, generation)
         }
@@ -346,8 +346,8 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
         if (eagerCatalogs.size > 1) {
             viewModelScope.launch {
                 delay(800L)
-                if (pendingCatalogLoads > 0 && hasAnyCatalogRows()) {
-                    Log.d(HomeViewModel.TAG, "Safety flush: pending=$pendingCatalogLoads — forcing UI update")
+                if (pendingCatalogLoads.get() > 0 && hasAnyCatalogRows()) {
+                    Log.d(HomeViewModel.TAG, "Safety flush: pending=${pendingCatalogLoads.get()} — forcing UI update")
                     scheduleUpdateCatalogRows()
                 }
             }
@@ -394,7 +394,7 @@ internal fun HomeViewModel.loadHeroCatalogsPipeline() {
     }
 
     val generation = catalogLoadGeneration
-    pendingCatalogLoads += heroToLoad.size
+    pendingCatalogLoads.addAndGet(heroToLoad.size)
     heroToLoad.forEach { (addon, catalog) ->
         loadCatalogPipeline(addon, catalog, generation)
     }
@@ -440,21 +440,21 @@ internal fun HomeViewModel.loadCatalogPipeline(
                             placeholderDescriptors.removeAll { it.catalogKey == key }
                         }
                         if (!hasCountedCompletion) {
-                            pendingCatalogLoads = (pendingCatalogLoads - 1).coerceAtLeast(0)
+                            pendingCatalogLoads.updateAndGet { (it - 1).coerceAtLeast(0) }
                             hasCountedCompletion = true
                         }
                         Log.d(
                             HomeViewModel.TAG,
-                            "Home catalog loaded addonId=${addon.id} type=${catalog.apiType} catalogId=${catalog.id} items=${result.data.items.size} pending=$pendingCatalogLoads"
+                            "Home catalog loaded addonId=${addon.id} type=${catalog.apiType} catalogId=${catalog.id} items=${result.data.items.size} pending=${pendingCatalogLoads.get()}"
                         )
-                        if (pendingCatalogLoads == 0) {
+                        if (pendingCatalogLoads.get() == 0) {
                             catalogsLoadInProgress = false
                         }
                         // Batch updates: only trigger a UI rebuild when all
                         // eager catalogs have completed, or let the debounce
                         // in scheduleUpdateCatalogRows coalesce intermediate
                         // arrivals.  When pending == 0 we always flush.
-                        if (pendingCatalogLoads == 0) {
+                        if (pendingCatalogLoads.get() == 0) {
                             scheduleUpdateCatalogRows()
                         } else if (!hasRenderedFirstCatalog) {
                             // First content arriving — show it quickly so the
@@ -475,18 +475,18 @@ internal fun HomeViewModel.loadCatalogPipeline(
                             placeholderDescriptors.removeAll { it.catalogKey == errorKey }
                         }
                         if (!hasCountedCompletion) {
-                            pendingCatalogLoads = (pendingCatalogLoads - 1).coerceAtLeast(0)
+                            pendingCatalogLoads.updateAndGet { (it - 1).coerceAtLeast(0) }
                             hasCountedCompletion = true
                         }
                         Log.w(
                             HomeViewModel.TAG,
                             "Home catalog failed addonId=${addon.id} type=${catalog.apiType} catalogId=${catalog.id} code=${result.code} message=${result.message}"
                         )
-                        if (pendingCatalogLoads == 0) {
+                        if (pendingCatalogLoads.get() == 0) {
                             catalogsLoadInProgress = false
                         }
                         // Same batching logic as success path.
-                        if (pendingCatalogLoads == 0 || !hasRenderedFirstCatalog) {
+                        if (pendingCatalogLoads.get() == 0 || !hasRenderedFirstCatalog) {
                             scheduleUpdateCatalogRows()
                         }
                     }

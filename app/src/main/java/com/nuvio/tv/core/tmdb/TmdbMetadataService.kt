@@ -661,7 +661,7 @@ class TmdbMetadataService(
                             description = rec.overview?.takeIf { it.isNotBlank() },
                             releaseInfo = releaseInfo,
                             imdbRating = rec.voteAverage?.toFloat(),
-                            genres = emptyList(),
+                            genres = resolveGenreIds(rec.genreIds),
                             landscapePoster = backdrop,
                             rawPosterUrl = fallbackPoster
                         )
@@ -730,7 +730,7 @@ class TmdbMetadataService(
                             description = part.overview?.takeIf { it.isNotBlank() },
                             releaseInfo = releaseInfo,
                             imdbRating = part.voteAverage?.toFloat(),
-                            genres = emptyList(),
+                            genres = resolveGenreIds(part.genreIds),
                             landscapePoster = backdrop,
                             rawPosterUrl = fallbackPoster
                         )
@@ -991,7 +991,7 @@ class TmdbMetadataService(
             description = result.overview?.takeIf { it.isNotBlank() },
             releaseInfo = releaseInfo,
             imdbRating = result.voteAverage?.toFloat(),
-            genres = emptyList()
+            genres = resolveGenreIds(result.genreIds)
         )
     }
 
@@ -1099,6 +1099,25 @@ class TmdbMetadataService(
         )
         private const val ENTITY_RAIL_MAX_ITEMS = 20
         private const val TOP_RATED_VOTE_COUNT_FLOOR = 200
+
+        private val TMDB_GENRE_MAP: Map<Int, String> = mapOf(
+            28 to "Action", 12 to "Adventure", 16 to "Animation",
+            35 to "Comedy", 80 to "Crime", 99 to "Documentary",
+            18 to "Drama", 10751 to "Family", 14 to "Fantasy",
+            36 to "History", 27 to "Horror", 10402 to "Music",
+            9648 to "Mystery", 10749 to "Romance", 878 to "Science Fiction",
+            10770 to "TV Movie", 53 to "Thriller", 10752 to "War",
+            37 to "Western",
+            10759 to "Action & Adventure", 10762 to "Kids",
+            10763 to "News", 10764 to "Reality",
+            10765 to "Sci-Fi & Fantasy", 10766 to "Soap",
+            10767 to "Talk", 10768 to "War & Politics"
+        )
+
+        fun resolveGenreIds(genreIds: List<Int>?): List<String> {
+            if (genreIds.isNullOrEmpty()) return emptyList()
+            return genreIds.mapNotNull { TMDB_GENRE_MAP[it] }
+        }
     }
 
     suspend fun fetchPersonDetail(
@@ -1197,7 +1216,7 @@ class TmdbMetadataService(
                     description = credit.overview?.takeIf { it.isNotBlank() },
                     releaseInfo = year,
                     imdbRating = credit.voteAverage?.toFloat(),
-                    genres = emptyList()
+                    genres = resolveGenreIds(credit.genreIds)
                 )
             }
     }
@@ -1222,7 +1241,7 @@ class TmdbMetadataService(
                     description = credit.overview?.takeIf { it.isNotBlank() },
                     releaseInfo = year,
                     imdbRating = credit.voteAverage?.toFloat(),
-                    genres = emptyList()
+                    genres = resolveGenreIds(credit.genreIds)
                 )
             }
     }
@@ -1247,7 +1266,7 @@ class TmdbMetadataService(
                     description = credit.overview?.takeIf { it.isNotBlank() },
                     releaseInfo = year,
                     imdbRating = credit.voteAverage?.toFloat(),
-                    genres = emptyList()
+                    genres = resolveGenreIds(credit.genreIds)
                 )
             }
     }
@@ -1272,7 +1291,7 @@ class TmdbMetadataService(
                     description = credit.overview?.takeIf { it.isNotBlank() },
                     releaseInfo = year,
                     imdbRating = credit.voteAverage?.toFloat(),
-                    genres = emptyList()
+                    genres = resolveGenreIds(credit.genreIds)
                 )
             }
     }

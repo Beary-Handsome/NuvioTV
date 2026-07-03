@@ -53,10 +53,21 @@ class RealDebridDirectDebridResolver @Inject constructor(
                     return DirectDebridResolveResult.Stale
                 }
 
-                val infoAfter = api.getTorrentInfo(authorization, torrentId)
-                if (!infoAfter.isSuccessful) return DirectDebridResolveResult.Stale
-                val link = infoAfter.body()?.firstDownloadLink()
-                    ?: return DirectDebridResolveResult.Stale
+                // Poll for download link — RD may need time after file selection
+                var link: String? = null
+                for (attempt in 1..20) {
+                    val infoAfter = api.getTorrentInfo(authorization, torrentId)
+                    if (!infoAfter.isSuccessful) return DirectDebridResolveResult.Stale
+                    link = infoAfter.body()?.firstDownloadLink()
+                    if (link != null) break
+                    val status = infoAfter.body()?.status?.lowercase()
+                    if (status in listOf("error", "dead", "magnet_error", "virus")) {
+                        return DirectDebridResolveResult.Stale
+                    }
+                    val delayMs = if (attempt <= 5) 500L else if (attempt <= 12) 1000L else 2000L
+                    kotlinx.coroutines.delay(delayMs)
+                }
+                if (link == null) return DirectDebridResolveResult.Stale
                 val unrestrict = api.unrestrictLink(authorization, link)
                 if (!unrestrict.isSuccessful) return DirectDebridResolveResult.Stale
                 val url = unrestrict.body()?.download?.takeIf { it.isNotBlank() }
@@ -82,12 +93,13 @@ class RealDebridDirectDebridResolver @Inject constructor(
     private fun retrofit2.Response<com.nuvio.tv.data.remote.dto.RealDebridAddTorrentDto>.toFailureForAdd(): DirectDebridResolveResult {
         return when (code()) {
             401, 403 -> DirectDebridResolveResult.Error
+            451 -> DirectDebridResolveResult.Error  // DMCA — content blocked by provider
             else -> DirectDebridResolveResult.Stale
         }
     }
 
     private fun RealDebridTorrentInfoDto.firstDownloadLink(): String? {
-        if (!status.equals("downloaded", ignoreCase = true)) return null
+        if (status?.equals("downloaded", ignoreCase = true) != true) return null
         return links.orEmpty().firstOrNull { it.isNotBlank() }
     }
 

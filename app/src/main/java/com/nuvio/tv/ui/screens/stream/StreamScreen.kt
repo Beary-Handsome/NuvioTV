@@ -793,7 +793,7 @@ private fun RightStreamSection(
         // Addon filter chips
         Box(modifier = Modifier.height(chipRowHeight)) {
             androidx.compose.animation.AnimatedVisibility(
-                visible = sourceChips.isNotEmpty() || (!isLoading && availableAddons.isNotEmpty()),
+                visible = availableAddons.size > 1 && (sourceChips.isNotEmpty() || (!isLoading && availableAddons.isNotEmpty())),
                 enter = fadeIn(animationSpec = tween(300)),
                 exit = fadeOut(animationSpec = tween(300))
             ) {

@@ -74,6 +74,7 @@ class WatchedSeriesStateHolder @Inject constructor(
         loadedForProfileId = profileId
     }
 
+    @Synchronized
     fun update(ids: Set<String>) {
         _fullyWatchedSeriesIds.value = ids
         val profileId = profileManager.activeProfileId.value

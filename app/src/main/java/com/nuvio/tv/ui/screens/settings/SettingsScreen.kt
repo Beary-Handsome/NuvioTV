@@ -26,7 +26,6 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.People
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.runtime.Composable
@@ -66,7 +65,6 @@ import kotlinx.coroutines.flow.map
 
 internal enum class SettingsCategory {
     EXPERIENCE,
-    ACCOUNT,
     PROFILES,
     APPEARANCE,
     LAYOUT,
@@ -117,13 +115,6 @@ private fun rememberSettingsSectionSpecs() = listOf(
         title = stringResource(R.string.settings_experience),
         icon = Icons.Default.Tune,
         subtitle = stringResource(R.string.settings_experience_subtitle),
-        destination = SettingsSectionDestination.Inline
-    ),
-    SettingsSectionSpec(
-        category = SettingsCategory.ACCOUNT,
-        title = stringResource(R.string.settings_account),
-        icon = Icons.Default.Person,
-        subtitle = stringResource(R.string.settings_account_subtitle),
         destination = SettingsSectionDestination.Inline
     ),
     SettingsSectionSpec(
@@ -203,7 +194,6 @@ fun SettingsScreen(
     showBuiltInHeader: Boolean = true,
     onNavigateToTrakt: () -> Unit = {},
     onNavigateToAddons: () -> Unit = {},
-    onNavigateToAuthQrSignIn: () -> Unit = {},
     onNavigateToManageProfiles: () -> Unit = {},
     onNavigateToSupportersContributors: () -> Unit = {},
     onNavigateToLicensesAttributions: () -> Unit = {},
@@ -237,7 +227,6 @@ fun SettingsScreen(
                 SettingsCategory.EXPERIENCE -> false
                 SettingsCategory.DEBUG -> BuildConfig.IS_DEBUG_BUILD && !isEssentialMode
                 SettingsCategory.PROFILES -> isPrimaryProfileActive
-                SettingsCategory.ACCOUNT -> isPrimaryProfileActive
                 SettingsCategory.LAYOUT -> true
                 SettingsCategory.PLUGINS -> AppFeaturePolicy.pluginsEnabled && !isEssentialMode
                 SettingsCategory.INTEGRATION -> true
@@ -375,7 +364,6 @@ fun SettingsScreen(
                                 onClick = {
                                     if (section.destination == SettingsSectionDestination.External) {
                                         when (section.category) {
-                                            SettingsCategory.ACCOUNT -> onNavigateToAuthQrSignIn()
                                             SettingsCategory.TRAKT -> onNavigateToTrakt()
                                             else -> Unit
                                         }
@@ -513,9 +501,6 @@ fun SettingsScreen(
                             }
                         )
                         SettingsCategory.PLUGINS -> if (AppFeaturePolicy.pluginsEnabled) PluginsSettingsContent()
-                        SettingsCategory.ACCOUNT -> AccountSettingsInline(
-                            onNavigateToAuthQrSignIn = onNavigateToAuthQrSignIn
-                        )
                         SettingsCategory.DEBUG -> DebugSettingsContent()
                         SettingsCategory.TRAKT -> Unit
                     }
@@ -591,31 +576,6 @@ private fun EssentialAdvancedSettingsContent(
             onConfirm = { experienceModeViewModel.setMode(ExperienceMode.ADVANCED) },
             onDismiss = { showConfirmation = false }
         )
-    }
-}
-
-@Composable
-private fun AccountSettingsInline(
-    onNavigateToAuthQrSignIn: () -> Unit
-) {
-    val accountViewModel: com.nuvio.tv.ui.screens.account.AccountViewModel = hiltViewModel()
-    val accountUiState by accountViewModel.uiState.collectAsStateWithLifecycle()
-
-    Column(
-        modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        SettingsDetailHeader(
-            title = stringResource(R.string.settings_account),
-            subtitle = stringResource(R.string.settings_account_section_subtitle)
-        )
-        SettingsGroupCard(modifier = Modifier.fillMaxSize()) {
-            com.nuvio.tv.ui.screens.account.AccountSettingsContent(
-                uiState = accountUiState,
-                viewModel = accountViewModel,
-                onNavigateToAuthQrSignIn = onNavigateToAuthQrSignIn
-            )
-        }
     }
 }
 

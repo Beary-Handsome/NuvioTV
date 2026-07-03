@@ -205,7 +205,7 @@ class LayoutPreferenceDataStore @Inject constructor(
     }
 
     val catalogTypeSuffixEnabled: Flow<Boolean> = profileFlow { prefs ->
-        prefs[catalogTypeSuffixEnabledKey] ?: true
+        prefs[catalogTypeSuffixEnabledKey] ?: false
     }
 
     val classicFocusGradientEnabled: Flow<Boolean> = profileFlow { prefs ->

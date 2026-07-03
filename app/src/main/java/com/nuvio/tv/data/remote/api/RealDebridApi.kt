@@ -52,4 +52,10 @@ interface RealDebridApi {
         @Header("Authorization") authorization: String,
         @Path("id") id: String
     ): Response<ResponseBody>
+
+    @GET("torrents/instantAvailability/{hash}")
+    suspend fun instantAvailability(
+        @Header("Authorization") authorization: String,
+        @Path("hash") hash: String
+    ): Response<ResponseBody>
 }

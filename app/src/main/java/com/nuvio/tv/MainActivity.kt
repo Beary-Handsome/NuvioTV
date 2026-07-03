@@ -143,8 +143,6 @@ import com.nuvio.tv.ui.theme.NuvioTheme
 import com.nuvio.tv.ui.util.LocalFastHorizontalNavigationEnabled
 import com.nuvio.tv.ui.util.LocalRecompositionHighlighterEnabled
 import com.nuvio.tv.ui.util.rememberDrawerItemFocusRequesters
-import com.nuvio.tv.updater.UpdateViewModel
-import com.nuvio.tv.updater.ui.UpdatePromptDialog
 import dagger.hilt.android.AndroidEntryPoint
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.haze
@@ -694,18 +692,8 @@ class MainActivity : ComponentActivity() {
                         )
                     }
 
-                    if (AppFeaturePolicy.inAppUpdatesEnabled && !BuildConfig.IS_DEBUG_BUILD) {
-                        val updateViewModel: UpdateViewModel = hiltViewModel(this@MainActivity)
-                        val updateState by updateViewModel.uiState.collectAsState()
-                        UpdatePromptDialog(
-                            state = updateState,
-                            onDismiss = { updateViewModel.dismissDialog() },
-                            onDownload = { updateViewModel.downloadUpdate() },
-                            onInstall = { updateViewModel.installUpdateOrRequestPermission() },
-                            onIgnore = { updateViewModel.ignoreThisVersion() },
-                            onOpenUnknownSources = { updateViewModel.openUnknownSourcesSettings() }
-                        )
-                    }
+                    // Update check/popup disabled — app runs fully independent
+                    // if (AppFeaturePolicy.inAppUpdatesEnabled && !BuildConfig.IS_DEBUG_BUILD) { ... }
                 }
             }
             }

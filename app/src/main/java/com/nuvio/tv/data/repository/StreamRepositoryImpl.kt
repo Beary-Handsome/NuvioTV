@@ -5,6 +5,7 @@ import android.util.Log
 import com.nuvio.tv.R
 import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.core.network.safeApiCall
+import com.nuvio.tv.core.debrid.DebridProviders
 import com.nuvio.tv.core.debrid.DebridStreamPresentation
 import com.nuvio.tv.core.debrid.LocalDebridAvailabilityService
 import com.nuvio.tv.core.plugin.PluginManager
@@ -90,7 +91,7 @@ class StreamRepositoryImpl @Inject constructor(
                 // Track number of pending jobs
                 val totalJobs = streamAddons.size +
                     (if (tmdbId != null) 1 else 0)
-                var completedJobs = 0
+                val completedJobs = java.util.concurrent.atomic.AtomicInteger(0)
 
                 // Launch addon jobs
                 streamAddons.forEach { addon ->
@@ -103,13 +104,13 @@ class StreamRepositoryImpl @Inject constructor(
                                         val namedStreams = streamsResult.data.map {
                                             it.copy(addonName = addon.displayName, addonLogo = addon.logo)
                                         }
-                                        resultChannel.send(
-                                            AddonStreams(
-                                                addonName = addon.displayName,
-                                                addonLogo = addon.logo,
-                                                streams = namedStreams
-                                            )
-                                        )
+                                        // Split direct debrid streams by provider so they
+                                        // appear as native "TorBox Instant", "AllDebrid Instant", etc.
+                                        // instead of under the addon name.
+                                        val groups = splitStreamsByProvider(namedStreams, addon.displayName, addon.logo)
+                                        for (group in groups) {
+                                            resultChannel.send(group)
+                                        }
                                     } else {
                                         // Stream endpoint returned empty - try inline
                                         // streams from meta response as fallback.
@@ -143,8 +144,7 @@ class StreamRepositoryImpl @Inject constructor(
                                 detail = e.message ?: context.getString(com.nuvio.tv.R.string.stream_error_detail_addon_request_failed)
                             )
                         } finally {
-                            completedJobs++
-                            if (completedJobs >= totalJobs) {
+                            if (completedJobs.incrementAndGet() >= totalJobs) {
                                 resultChannel.close()
                             }
                         }
@@ -157,16 +157,14 @@ class StreamRepositoryImpl @Inject constructor(
                         try {
                             // Stream plugins individually
                             streamLocalPlugins(tmdbId, type, season, episode, resultChannel) {
-                                completedJobs++
-                                if (completedJobs >= totalJobs) {
+                                if (completedJobs.incrementAndGet() >= totalJobs) {
                                     resultChannel.close()
                                 }
                             }
                         } catch (e: Exception) {
                             if (e is CancellationException) throw e
                             Log.e(TAG, "Plugin execution failed: ${e.message}")
-                            completedJobs++
-                            if (completedJobs >= totalJobs) {
+                            if (completedJobs.incrementAndGet() >= totalJobs) {
                                 resultChannel.close()
                             }
                         }
@@ -180,16 +178,16 @@ class StreamRepositoryImpl @Inject constructor(
 
                 // Emit results as they arrive
                 for (result in resultChannel) {
+                    // First emit: mark as checking so auto-play can see streams exist
                     val checkingResult = localDebridAvailabilityService.markChecking(listOf(result)).firstOrNull() ?: result
                     mergePresentedResult(accumulatedResults, checkingResult)
                     emit(NetworkResult.Success(accumulatedResults.toList()))
-                    Log.d(TAG, "Emitted ${accumulatedResults.size} addon(s), latest: ${checkingResult.addonName} with ${checkingResult.streams.size} streams")
 
+                    // Second emit: with cache check results
                     val checkedResult = localDebridAvailabilityService.annotateCachedAvailability(listOf(checkingResult)).firstOrNull() ?: checkingResult
                     if (checkedResult != checkingResult) {
                         mergePresentedResult(accumulatedResults, checkedResult)
                         emit(NetworkResult.Success(accumulatedResults.toList()))
-                        Log.d(TAG, "Emitted debrid cache status for ${checkedResult.addonName} with ${checkedResult.streams.size} streams")
                     }
                 }
             }
@@ -219,19 +217,59 @@ class StreamRepositoryImpl @Inject constructor(
         accumulatedResults: MutableList<AddonStreams>,
         result: AddonStreams
     ) {
+        // Merge raw streams first, then apply presentation ONCE on the full list.
+        // This prevents re-applying presentation on each merge which can lose streams.
         val existingIndex = accumulatedResults.indexOfFirst { it.addonName == result.addonName }
         if (existingIndex >= 0) {
             val existing = accumulatedResults[existingIndex]
-            val merged = existing.copy(
+            accumulatedResults[existingIndex] = existing.copy(
                 streams = mergeStreams(existing.streams, result.streams)
             )
-            accumulatedResults[existingIndex] = debridStreamPresentation.apply(listOf(merged))
-                .firstOrNull() ?: merged
         } else {
-            accumulatedResults.add(
-                debridStreamPresentation.apply(listOf(result)).firstOrNull() ?: result
-            )
+            accumulatedResults.add(result)
         }
+        // Apply presentation on ALL accumulated results together
+        val presented = debridStreamPresentation.apply(accumulatedResults.toList())
+        accumulatedResults.clear()
+        accumulatedResults.addAll(presented)
+    }
+
+    /**
+     * Split streams from an addon into groups by debrid provider.
+     * Direct debrid streams (clientResolve.type="debrid") are grouped under
+     * the provider's native name (e.g. "Torbox Instant") so they appear
+     * alongside the app's built-in debrid streams.
+     * Non-debrid streams stay under the addon's name.
+     */
+    private fun splitStreamsByProvider(
+        streams: List<Stream>,
+        addonName: String,
+        addonLogo: String?
+    ): List<AddonStreams> {
+        val providerGroups = mutableMapOf<String, MutableList<Stream>>()
+        val otherStreams = mutableListOf<Stream>()
+
+        for (stream in streams) {
+            val service = stream.clientResolve?.service
+            val provider = if (service != null) DebridProviders.byId(service) else null
+            if (stream.isDirectDebrid() && provider != null) {
+                val groupName = DebridProviders.instantName(provider.id)
+                providerGroups.getOrPut(groupName) { mutableListOf() }.add(
+                    stream.copy(addonName = groupName)
+                )
+            } else {
+                otherStreams.add(stream)
+            }
+        }
+
+        val result = mutableListOf<AddonStreams>()
+        for ((groupName, groupStreams) in providerGroups) {
+            result.add(AddonStreams(addonName = groupName, addonLogo = addonLogo, streams = groupStreams))
+        }
+        if (otherStreams.isNotEmpty()) {
+            result.add(AddonStreams(addonName = addonName, addonLogo = addonLogo, streams = otherStreams))
+        }
+        return result
     }
 
     private fun mergeStreams(existing: List<Stream>, incoming: List<Stream>): List<Stream> {

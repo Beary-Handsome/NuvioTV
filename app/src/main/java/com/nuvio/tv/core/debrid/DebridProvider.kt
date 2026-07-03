@@ -70,6 +70,7 @@ object DebridProviders {
         visibleInUi = true,
         capabilities = setOf(
             DebridProviderCapability.ClientResolve,
+            DebridProviderCapability.LocalTorrentCacheCheck,
             DebridProviderCapability.LocalTorrentResolve
         )
     )

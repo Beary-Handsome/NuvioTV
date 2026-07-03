@@ -222,6 +222,9 @@ class AddonPreferences @Inject constructor(
     }
 
     private fun getDefaultAddons(): Set<String> = setOf(
-        "https://rivenmedia.duckdns.org/riven"
+        "https://rivenmedia.duckdns.org/riven",
+        "https://rivenmedia.duckdns.org/comet",
+        "https://rivenmedia.duckdns.org/mediafusion",
+        "https://rivenmedia.duckdns.org/easynews-addon"
     )
 }

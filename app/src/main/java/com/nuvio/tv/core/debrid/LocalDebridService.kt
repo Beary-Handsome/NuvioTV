@@ -1,7 +1,9 @@
 package com.nuvio.tv.core.debrid
 
+import android.util.Log
 import com.nuvio.tv.data.remote.api.AllDebridApi
 import com.nuvio.tv.data.remote.api.PremiumizeApi
+import com.nuvio.tv.data.remote.api.RealDebridApi
 import com.nuvio.tv.data.remote.api.TorboxApi
 import com.nuvio.tv.data.remote.dto.TorboxCheckCachedRequestDto
 import kotlinx.coroutines.CancellationException
@@ -17,7 +19,8 @@ data class LocalDebridCachedItem(
 class LocalDebridService @Inject constructor(
     private val torboxApi: TorboxApi,
     private val premiumizeApi: PremiumizeApi,
-    private val allDebridApi: AllDebridApi
+    private val allDebridApi: AllDebridApi,
+    private val realDebridApi: RealDebridApi
 ) {
     suspend fun checkCached(
         account: DebridServiceCredential,
@@ -27,6 +30,7 @@ class LocalDebridService @Inject constructor(
             DebridProviders.TORBOX_ID -> checkTorboxCached(account.apiKey, hashes)
             DebridProviders.PREMIUMIZE_ID -> checkPremiumizeCached(account.apiKey, hashes)
             DebridProviders.ALLDEBRID_ID -> checkAllDebridCached(account.apiKey, hashes)
+            DebridProviders.REAL_DEBRID_ID -> checkRealDebridCached(account.apiKey, hashes)
             else -> null
         }
 
@@ -110,6 +114,46 @@ class LocalDebridService @Inject constructor(
             }
         } catch (error: Exception) {
             if (error is CancellationException) throw error
+            null
+        }
+
+    private suspend fun checkRealDebridCached(
+        apiKey: String,
+        hashes: List<String>
+    ): Map<String, LocalDebridCachedItem>? =
+        try {
+            val normalizedHashes = hashes.normalizedHashes()
+            if (normalizedHashes.isEmpty()) return emptyMap()
+            val authorization = "Bearer ${apiKey.trim()}"
+            val result = mutableMapOf<String, LocalDebridCachedItem>()
+            // RD supports multiple hashes per request: /torrents/instantAvailability/hash1/hash2/...
+            // Batch in groups of 100 to stay within URL length limits
+            for (batch in normalizedHashes.chunked(100)) {
+                try {
+                    val hashPath = batch.joinToString("/")
+                    val response = realDebridApi.instantAvailability(authorization, hashPath)
+                    if (response.isSuccessful) {
+                        val body = response.body()?.string() ?: "{}"
+                        try {
+                            val json = org.json.JSONObject(body)
+                            for (hash in batch) {
+                                val hashData = json.optJSONObject(hash) ?: json.optJSONObject(hash.uppercase())
+                                if (hashData != null && hashData.has("rd")) {
+                                    result[hash] = LocalDebridCachedItem(name = null, size = null)
+                                }
+                            }
+                        } catch (_: Exception) {
+                            // JSON parse failure — skip this batch
+                        }
+                    }
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                }
+            }
+            result
+        } catch (error: Exception) {
+            if (error is CancellationException) throw error
+            Log.w("LocalDebridService", "RD cache check failed: ${error.message}")
             null
         }
 

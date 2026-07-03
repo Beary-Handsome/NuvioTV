@@ -141,9 +141,11 @@ class EasynewsDirectDebridResolver @Inject constructor(
 
     private fun matchesEpisode(filename: String, season: Int?, episode: Int?): Boolean {
         if (season == null || episode == null) return true
+        val s = season.toString().padStart(2, '0')
+        val e = episode.toString().padStart(2, '0')
+        // Match S01E05 followed by end-of-episode-block (non-digit, or E for multi-ep like S01E05E06)
         val pattern = Regex(
-            "s${season.toString().padStart(2, '0')}e${episode.toString().padStart(2, '0')}\\b|" +
-                "${season}x${episode.toString().padStart(2, '0')}\\b",
+            "s${s}e${e}(?:[^0-9]|e\\d|\$)|${season}x${e}(?:[^0-9]|\$)",
             RegexOption.IGNORE_CASE
         )
         return pattern.containsMatchIn(filename)

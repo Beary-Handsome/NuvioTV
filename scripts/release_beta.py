@@ -14,7 +14,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 BUILD_FILE = ROOT / "app" / "build.gradle.kts"
 RELEASE_OUTPUT_DIR = ROOT / "build" / "release"
-APK_DIR = ROOT / "app" / "build" / "outputs" / "apk" / "release"
+APK_BASE_DIR = ROOT / "app" / "build" / "outputs" / "apk"
+APK_SEARCH_DIRS = [
+    APK_BASE_DIR / "full" / "release",
+    APK_BASE_DIR / "playstore" / "release",
+    APK_BASE_DIR / "release",
+]
 DEFAULT_BETA_NOTICE = (
     "## This is a beta version intended for testing only. Expect breaking changes "
     "in updates. Normal users are advised to wait for the stable release."
@@ -336,15 +341,19 @@ def build_release() -> list[Path]:
         check=True,
         text=True,
     )
+    all_apks: list[Path] = []
+    for search_dir in APK_SEARCH_DIRS:
+        if search_dir.is_dir():
+            all_apks.extend(search_dir.glob("*.apk"))
     assets = sorted(
-        APK_DIR.glob("*.apk"),
+        all_apks,
         key=lambda path: next(
             (order for token, order in ASSET_ORDER.items() if token in path.name),
             999,
         ),
     )
     if not assets:
-        raise SystemExit(f"No APK assets found in {APK_DIR}")
+        raise SystemExit(f"No APK assets found in {APK_SEARCH_DIRS}")
     return assets
 
 

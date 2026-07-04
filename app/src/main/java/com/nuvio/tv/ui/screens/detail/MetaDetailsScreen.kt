@@ -851,7 +851,8 @@ private fun MetaDetailsContent(
         selectedComment?.let { review -> comments.indexOfFirst { it.id == review.id } } ?: -1
     }
     val isSeries = remember(meta.type, meta.videos) {
-        meta.type == ContentType.SERIES || meta.videos.isNotEmpty()
+        meta.type == ContentType.SERIES || meta.type == ContentType.TV ||
+            (meta.type != ContentType.MOVIE && meta.videos.isNotEmpty())
     }
     val defaultSeriesVideo = remember(meta.behaviorHints?.defaultVideoId, meta.videos) {
         val defaultVideoId = meta.behaviorHints?.defaultVideoId

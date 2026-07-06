@@ -79,7 +79,9 @@ class HomeViewModel @Inject constructor(
     internal val watchedSeriesStateHolder: com.nuvio.tv.data.local.WatchedSeriesStateHolder,
     internal val cwEnrichmentCache: ContinueWatchingEnrichmentCache,
     private val profileManager: com.nuvio.tv.core.profile.ProfileManager,
-    internal val tvRecommendationManager: TvRecommendationManager
+    internal val tvRecommendationManager: TvRecommendationManager,
+    internal val traktRecommendationsService: com.nuvio.tv.core.trakt.TraktRecommendationsService,
+    internal val traktAuthDataStore: com.nuvio.tv.data.local.TraktAuthDataStore
 ) : ViewModel() {
     companion object {
         internal const val TAG = "HomeViewModel"
@@ -297,6 +299,7 @@ class HomeViewModel @Inject constructor(
             observeProgressSourceChanges()
             observeCollections()
             observeInstalledAddons()
+            observeTraktRecommendations()
 
             viewModelScope.launch {
                 _uiState
@@ -663,6 +666,31 @@ class HomeViewModel @Inject constructor(
 
     private fun loadMoreCatalogItems(catalogId: String, addonId: String, type: String) =
         loadMoreCatalogItemsPipeline(catalogId, addonId, type)
+
+    internal var traktRecommendationRows: List<CatalogRow> = emptyList()
+
+    /** Fetch personalized Trakt recommendation rows when logged in; clear on logout. */
+    private fun observeTraktRecommendations() {
+        viewModelScope.launch {
+            traktAuthDataStore.isAuthenticated
+                .distinctUntilChanged()
+                .collectLatest { authenticated ->
+                    traktRecommendationRows = if (authenticated) {
+                        val language = currentTmdbSettings.language
+                        val movies = runCatching {
+                            traktRecommendationsService.recommendedMoviesRow(language)
+                        }.getOrNull()
+                        val shows = runCatching {
+                            traktRecommendationsService.recommendedShowsRow(language)
+                        }.getOrNull()
+                        listOfNotNull(movies, shows)
+                    } else {
+                        emptyList()
+                    }
+                    scheduleUpdateCatalogRows()
+                }
+        }
+    }
 
     internal fun scheduleUpdateCatalogRows() {
         catalogUpdateJob?.cancel()

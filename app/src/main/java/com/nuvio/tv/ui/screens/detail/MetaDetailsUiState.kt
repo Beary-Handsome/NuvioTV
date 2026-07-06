@@ -78,7 +78,11 @@ data class MetaDetailsUiState(
     val commentsEpisodeTarget: Video? = null,
     val selectedComment: TraktCommentReview? = null,
     val userMessage: String? = null,
-    val userMessageIsError: Boolean = false
+    val userMessageIsError: Boolean = false,
+    val userRating: Int? = null,
+    val ratingPending: Boolean = false,
+    val showRatingPicker: Boolean = false,
+    val isTraktAuthenticated: Boolean = false
 )
 
 sealed class MetaDetailsEvent {
@@ -114,4 +118,8 @@ sealed class MetaDetailsEvent {
     data object OnPickerDismiss : MetaDetailsEvent()
     data object OnClearMessage : MetaDetailsEvent()
     data object OnLifecyclePause : MetaDetailsEvent()
+    data object OnRatingClick : MetaDetailsEvent()
+    data object OnRatingPickerDismiss : MetaDetailsEvent()
+    data class OnRate(val stars: Int) : MetaDetailsEvent()
+    data object OnClearRating : MetaDetailsEvent()
 }

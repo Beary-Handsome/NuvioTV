@@ -51,3 +51,5 @@ logs
 AGENTS.md
 docs/
 status-page/
+# Release signing keystore (never commit)
+*.jks

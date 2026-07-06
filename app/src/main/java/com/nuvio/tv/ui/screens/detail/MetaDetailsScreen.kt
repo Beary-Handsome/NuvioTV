@@ -546,6 +546,10 @@ fun MetaDetailsScreen(
                     onPlayButtonFocused = { viewModel.onEvent(MetaDetailsEvent.OnPlayButtonFocused) },
                     onToggleLibrary = { viewModel.onEvent(MetaDetailsEvent.OnToggleLibrary) },
                     onLibraryLongPress = { viewModel.onEvent(MetaDetailsEvent.OnLibraryLongPress) },
+                    userRating = uiState.userRating,
+                    ratingEnabled = uiState.isTraktAuthenticated,
+                    onRate = { stars -> viewModel.onEvent(MetaDetailsEvent.OnRate(stars)) },
+                    onClearRating = { viewModel.onEvent(MetaDetailsEvent.OnClearRating) },
                     onToggleMovieWatched = { viewModel.onEvent(MetaDetailsEvent.OnToggleMovieWatched) },
                     onToggleEpisodeWatched = { video ->
                         viewModel.onEvent(MetaDetailsEvent.OnToggleEpisodeWatched(video))
@@ -800,6 +804,10 @@ private fun MetaDetailsContent(
     onPlayButtonFocused: () -> Unit,
     onToggleLibrary: () -> Unit,
     onLibraryLongPress: () -> Unit,
+    userRating: Int? = null,
+    ratingEnabled: Boolean = false,
+    onRate: (Int) -> Unit = {},
+    onClearRating: () -> Unit = {},
     onToggleMovieWatched: () -> Unit,
     onToggleEpisodeWatched: (Video) -> Unit,
     onMarkSeasonWatched: (Int) -> Unit,
@@ -1583,7 +1591,11 @@ private fun MetaDetailsContent(
                             onPlayButtonFocused()
                             initialHeroFocusRequested = true
                             clearPendingRestore()
-                        }
+                        },
+                        userRating = userRating,
+                        ratingEnabled = ratingEnabled,
+                        onRate = onRate,
+                        onClearRating = onClearRating
                     )
                 }
             }

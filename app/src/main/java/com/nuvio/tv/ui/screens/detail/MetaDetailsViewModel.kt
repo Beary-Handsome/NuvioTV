@@ -85,6 +85,7 @@ class MetaDetailsViewModel @Inject constructor(
     private val traktAuthDataStore: TraktAuthDataStore,
     private val traktCommentsService: TraktCommentsService,
     private val traktRelatedService: TraktRelatedService,
+    private val traktRatingsService: com.nuvio.tv.data.repository.TraktRatingsService,
     private val traktSettingsDataStore: TraktSettingsDataStore,
     private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
     private val playerSettingsDataStore: PlayerSettingsDataStore,
@@ -198,6 +199,10 @@ class MetaDetailsViewModel @Inject constructor(
                 .collectLatest { (enabled, authenticated) ->
                     traktCommentsEnabled = enabled
                     traktAuthenticated = authenticated
+                    _uiState.update { state ->
+                        if (state.isTraktAuthenticated == authenticated) state
+                        else state.copy(isTraktAuthenticated = authenticated)
+                    }
 
                     val meta = _uiState.value.meta
                     val shouldShow = enabled && authenticated && supportsComments(meta)
@@ -326,6 +331,10 @@ class MetaDetailsViewModel @Inject constructor(
             MetaDetailsEvent.OnPickerDismiss -> dismissListPicker()
             MetaDetailsEvent.OnClearMessage -> clearMessage()
             MetaDetailsEvent.OnLifecyclePause -> handleLifecyclePause()
+            MetaDetailsEvent.OnRatingClick -> _uiState.update { it.copy(showRatingPicker = true) }
+            MetaDetailsEvent.OnRatingPickerDismiss -> _uiState.update { it.copy(showRatingPicker = false) }
+            is MetaDetailsEvent.OnRate -> rate(event.stars)
+            MetaDetailsEvent.OnClearRating -> clearRating()
         }
     }
 
@@ -400,6 +409,17 @@ class MetaDetailsViewModel @Inject constructor(
                     _uiState.update { state ->
                         if (state.isInWatchlist == inWatchlist) state else state.copy(isInWatchlist = inWatchlist)
                     }
+                }
+        }
+
+        viewModelScope.launch {
+            canonicalKey
+                .distinctUntilChanged()
+                .collectLatest { (id, type) ->
+                    val rating = runCatching {
+                        traktRatingsService.currentRating(id, _uiState.value.meta?.imdbId, type)
+                    }.getOrNull()
+                    _uiState.update { state -> state.copy(userRating = rating) }
                 }
         }
     }
@@ -1902,6 +1922,34 @@ class MetaDetailsViewModel @Inject constructor(
                     isError = true
                 )
             }
+        }
+    }
+
+    /** Apply a 1..5 star rating to the current item, pushing it to Trakt. */
+    private fun rate(stars: Int) {
+        val meta = _uiState.value.meta ?: return
+        val previous = _uiState.value.userRating
+        val traktRating = stars.coerceIn(1, 5) * 2
+        _uiState.update { it.copy(userRating = traktRating, ratingPending = true, showRatingPicker = false) }
+        viewModelScope.launch {
+            val ok = runCatching {
+                traktRatingsService.rate(meta.id, meta.imdbId, meta.apiType, stars)
+            }.getOrDefault(false)
+            _uiState.update { it.copy(ratingPending = false, userRating = if (ok) traktRating else previous) }
+            if (!ok) showMessage("Couldn't save rating to Trakt", isError = true)
+        }
+    }
+
+    private fun clearRating() {
+        val meta = _uiState.value.meta ?: return
+        val previous = _uiState.value.userRating
+        _uiState.update { it.copy(userRating = null, ratingPending = true, showRatingPicker = false) }
+        viewModelScope.launch {
+            val ok = runCatching {
+                traktRatingsService.clear(meta.id, meta.imdbId, meta.apiType)
+            }.getOrDefault(false)
+            _uiState.update { it.copy(ratingPending = false, userRating = if (ok) null else previous) }
+            if (!ok) showMessage("Couldn't remove rating on Trakt", isError = true)
         }
     }
 

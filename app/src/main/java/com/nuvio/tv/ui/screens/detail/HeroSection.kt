@@ -70,6 +70,8 @@ import com.nuvio.tv.ui.theme.NuvioColors
 import com.nuvio.tv.ui.theme.NuvioTheme
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.ui.platform.LocalContext
@@ -104,7 +106,11 @@ fun HeroContentSection(
     playButtonFocusRequester: FocusRequester? = null,
     restorePlayFocusToken: Int = 0,
     onHeroActionFocused: () -> Unit = {},
-    onPlayFocusRestored: () -> Unit = {}
+    onPlayFocusRestored: () -> Unit = {},
+    userRating: Int? = null,
+    ratingEnabled: Boolean = false,
+    onRate: (Int) -> Unit = {},
+    onClearRating: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val isSeriesApi = remember(meta.apiType) {
@@ -288,6 +294,22 @@ fun HeroContentSection(
                                 onClick = onTrailerClick,
                                 onFocused = onHeroActionFocused
                             )
+                        }
+
+                        if (ratingEnabled) {
+                            val currentStars = (userRating ?: 0).let { (it + 1) / 2 }
+                            for (star in 1..5) {
+                                ActionIconButton(
+                                    icon = if (star <= currentStars) Icons.Filled.Star else Icons.Filled.StarBorder,
+                                    contentDescription = "Rate $star star${if (star == 1) "" else "s"}",
+                                    onClick = { onRate(star) },
+                                    onLongPress = onClearRating,
+                                    selected = star <= currentStars,
+                                    selectedContainerColor = Color(0xFFFFC107),
+                                    selectedContentColor = Color.Black,
+                                    onFocused = onHeroActionFocused
+                                )
+                            }
                         }
                     }
 

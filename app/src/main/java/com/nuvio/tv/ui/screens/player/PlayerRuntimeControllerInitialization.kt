@@ -639,6 +639,15 @@ internal fun PlayerRuntimeController.initializePlayer(
                                 bingeGroupCacheDataStore.remove(cid)
                             }
                         }
+                        // Invalidate the reuse-last-link cache too — a failed
+                        // playback usually means an expired debrid URL, and we
+                        // must not serve that same dead link again next time.
+                        if (contentType != null && videoId != null) {
+                            val reuseKey = "${contentType.lowercase()}|$videoId"
+                            scope.launch(kotlinx.coroutines.NonCancellable) {
+                                streamLinkCacheDataStore.remove(reuseKey)
+                            }
+                        }
                         // Try switching to the next available stream before
                         // showing the error to the user.
                         if (tryNextStream()) {

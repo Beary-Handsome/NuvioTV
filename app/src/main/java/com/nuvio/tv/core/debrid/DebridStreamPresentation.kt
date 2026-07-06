@@ -21,9 +21,15 @@ class DebridStreamPresentation @Inject constructor(
     fun apply(groups: List<AddonStreams>, settings: DebridSettings): List<AddonStreams> {
         if (!settings.canResolvePlayableLinks) return groups
 
-        // Collect ALL playable streams from ALL addons into one unified list.
-        // Drop raw uncached P2P torrents — only keep debrid-resolvable streams.
-        val allPlayable = mutableListOf<Stream>()
+        // Collect playable streams into two buckets:
+        //  - debridStreams: debrid / torrent streams, subject to the user's
+        //    quality/HDR/codec/size preferences.
+        //  - directStreams: direct-URL sources (EasyNews / Usenet). These are
+        //    the reliable fallback for obscure content, so they ALWAYS show
+        //    if present — they bypass the preference filters entirely and are
+        //    listed right alongside the cached debrid streams.
+        val debridStreams = mutableListOf<Stream>()
+        val directStreams = mutableListOf<Stream>()
 
         for (group in groups) {
             for (stream in group.streams) {
@@ -31,28 +37,29 @@ class DebridStreamPresentation @Inject constructor(
 
                 when {
                     // Direct debrid stream (clientResolve with isCached=true)
-                    stream.isDirectDebrid() -> allPlayable.add(stream)
+                    stream.isDirectDebrid() -> debridStreams.add(stream)
 
                     // Cached torrent confirmed on a provider — clean up name
                     stream.needsLocalDebridResolve() &&
                         stream.debridCacheStatus?.state == StreamDebridCacheState.CACHED ->
-                        allPlayable.add(cleanupCachedTorrentName(stream))
+                        debridStreams.add(cleanupCachedTorrentName(stream))
 
-                    // Stream with a playable URL (EasyNews, etc.)
-                    !stream.getStreamUrl().isNullOrBlank() -> allPlayable.add(stream)
+                    // Direct playable URL that is NOT a debrid/torrent stream
+                    // (EasyNews, etc.) — always shown, never filtered.
+                    !stream.getStreamUrl().isNullOrBlank() -> directStreams.add(stream)
 
                     // Uncached or still checking — show all torrent streams
                     // Cached will sort first, uncached are still playable via debrid
                     stream.needsLocalDebridResolve() ->
-                        allPlayable.add(cleanupCachedTorrentName(stream))
+                        debridStreams.add(cleanupCachedTorrentName(stream))
                 }
             }
         }
 
-        if (allPlayable.isEmpty()) return groups
+        if (debridStreams.isEmpty() && directStreams.isEmpty()) return groups
 
         // Format all managed debrid streams
-        val formatted = allPlayable.map { stream ->
+        val formatted = debridStreams.map { stream ->
             if (stream.isManagedDebridStream()) {
                 formatter.format(stream, settings)
             } else {
@@ -61,16 +68,19 @@ class DebridStreamPresentation @Inject constructor(
         }
 
         // Apply user's stream preferences (HDR/DV exclusion, minimum quality,
-        // codec filter, etc.).  Streams without quality metadata pass through
-        // safely — matchesFilters only excludes when an excluded tag is
-        // positively detected, not when metadata is absent.
+        // codec filter, etc.) to debrid/torrent streams only.
         val filtered = DirectDebridStreamFilter.applyPreferences(formatted, settings)
 
-        // Stable-sort so cached streams appear first while preserving the
-        // quality-based ordering from applyPreferences.
-        val sorted = filtered.sortedByDescending { stream ->
-            stream.debridCacheStatus?.state == StreamDebridCacheState.CACHED
+        // Order: cached debrid first, then EasyNews/direct (always present),
+        // then uncached debrid. EasyNews sits alongside the cached streams so
+        // it's the visible fallback whenever nothing playable is cached.
+        val cachedDebrid = filtered.filter {
+            it.debridCacheStatus?.state == StreamDebridCacheState.CACHED
         }
+        val uncachedDebrid = filtered.filter {
+            it.debridCacheStatus?.state != StreamDebridCacheState.CACHED
+        }
+        val sorted = cachedDebrid + directStreams + uncachedDebrid
 
         return listOf(
             AddonStreams(

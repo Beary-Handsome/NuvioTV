@@ -134,6 +134,16 @@ class StreamLinkCacheDataStore @Inject constructor(
         return parsed
     }
 
+    /**
+     * Drop the cached link for this content. Called when a reused link fails
+     * to play (e.g. an expired debrid URL) so the dead link isn't served again.
+     */
+    suspend fun remove(contentKey: String) {
+        store().edit { prefs ->
+            prefs.remove(cachePrefKey(contentKey))
+        }
+    }
+
     private fun cachePrefKey(contentKey: String): Preferences.Key<String> {
         val digest = MessageDigest.getInstance("SHA-256")
             .digest(contentKey.toByteArray(Charsets.UTF_8))

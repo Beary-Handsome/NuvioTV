@@ -1547,10 +1547,18 @@ internal fun PlayerRuntimeController.initializePlayer(
                                 playerSettingsDataStore.setLastPlaybackDiagnostics(errorDiagnostics)
                             }
                         }
-
                         // Fatal error: stop any next-episode auto-play that may have been
                         // armed by a short placeholder ENDED or residual post-play state.
                         cancelNextEpisodeAutoPlayOnFatalError()
+
+                        // A fatal playback error commonly means a reused debrid URL expired.
+                        // Evict it so reopening this title performs a fresh scrape and resolve.
+                        if (contentType != null && videoId != null) {
+                            val reuseKey = "${contentType.lowercase()}|$videoId"
+                            scope.launch(kotlinx.coroutines.NonCancellable) {
+                                streamLinkCacheDataStore.remove(reuseKey)
+                            }
+                        }
                         _uiState.update {
                             it.copy(
                                 error = detailedError,

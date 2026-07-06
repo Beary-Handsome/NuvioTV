@@ -18,6 +18,10 @@ import com.nuvio.tv.data.remote.dto.trakt.TraktListSummaryDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktMovieDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktPlaybackItemDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktProminentListDto
+import com.nuvio.tv.data.remote.dto.trakt.TraktRatingItemDto
+import com.nuvio.tv.data.remote.dto.trakt.TraktRatingsRemoveRequestDto
+import com.nuvio.tv.data.remote.dto.trakt.TraktRatingsRequestDto
+import com.nuvio.tv.data.remote.dto.trakt.TraktRatingsResponseDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktReorderListsRequestDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktReorderListsResponseDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktRefreshTokenRequestDto
@@ -379,4 +383,40 @@ interface TraktApi {
         @Header("Authorization") authorization: String,
         @Body body: TraktListItemsMutationRequestDto
     ): Response<TraktListItemsMutationResponseDto>
+
+    @POST("sync/ratings")
+    suspend fun addRatings(
+        @Header("Authorization") authorization: String,
+        @Body body: TraktRatingsRequestDto
+    ): Response<TraktRatingsResponseDto>
+
+    @POST("sync/ratings/remove")
+    suspend fun removeRatings(
+        @Header("Authorization") authorization: String,
+        @Body body: TraktRatingsRemoveRequestDto
+    ): Response<TraktRatingsResponseDto>
+
+    @GET("sync/ratings/{type}")
+    suspend fun getRatings(
+        @Header("Authorization") authorization: String,
+        @Path("type") type: String
+    ): Response<List<TraktRatingItemDto>>
+
+    @GET("recommendations/movies")
+    suspend fun getRecommendedMovies(
+        @Header("Authorization") authorization: String,
+        @Query("limit") limit: Int = 30,
+        @Query("extended") extended: String = "full",
+        @Query("ignore_collected") ignoreCollected: Boolean = false,
+        @Query("ignore_watchlisted") ignoreWatchlisted: Boolean = false
+    ): Response<List<TraktMovieDto>>
+
+    @GET("recommendations/shows")
+    suspend fun getRecommendedShows(
+        @Header("Authorization") authorization: String,
+        @Query("limit") limit: Int = 30,
+        @Query("extended") extended: String = "full",
+        @Query("ignore_collected") ignoreCollected: Boolean = false,
+        @Query("ignore_watchlisted") ignoreWatchlisted: Boolean = false
+    ): Response<List<TraktShowDto>>
 }

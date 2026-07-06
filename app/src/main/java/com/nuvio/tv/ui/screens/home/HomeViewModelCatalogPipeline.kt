@@ -715,6 +715,10 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
                 add(HomeRow.CollectionRow(collection))
             }
         }
+            // Personalized Trakt recommendation rows (empty when logged out).
+            traktRecommendationRows.forEach { row ->
+                if (row.items.isNotEmpty()) add(HomeRow.Catalog(row))
+            }
         for (key in orderedKeys) {
             if (key in disabledHomeCatalogKeys) continue
             val collectionEntry = collectionsSnapshot[key]

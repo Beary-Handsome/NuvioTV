@@ -19,7 +19,12 @@ internal fun parseContentIds(contentId: String?): ParsedContentIds {
     }
 
     if (raw.startsWith("tmdb:", ignoreCase = true)) {
-        return ParsedContentIds(tmdb = raw.substringAfter(':').substringBefore(':').toIntOrNull())
+        // Handle both tmdb:123 and tmdb:movie:123 / tmdb:series:123 forms —
+        // take the first numeric segment after the tmdb: prefix. (The old
+        // substringBefore(':') grabbed "movie"/"series" and parsed to null,
+        // breaking Trakt scrobble/progress for any tmdb-fallback ID.)
+        val tmdbNum = raw.split(":").drop(1).firstNotNullOfOrNull { it.toIntOrNull() }
+        return ParsedContentIds(tmdb = tmdbNum)
     }
 
     if (raw.startsWith("trakt:", ignoreCase = true)) {

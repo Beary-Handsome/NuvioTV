@@ -138,6 +138,9 @@ class MetaDetailsViewModel @Inject constructor(
     private var trailerAutoplayEnabled = false
     private var trailerHasPlayed = false
     private var suppressSeasonAutoSwitch = false
+    // Bumped on every user rate()/clearRating() so an in-flight on-open rating
+    // fetch can detect it's stale and avoid clobbering the user's value.
+    private var userRatingWriteToken = 0
 
     private var isPlayButtonFocused = false
     private var hideUnreleasedContent = false
@@ -442,10 +445,16 @@ class MetaDetailsViewModel @Inject constructor(
             canonicalKey
                 .distinctUntilChanged()
                 .collectLatest { (id, type) ->
+                    val tokenAtStart = userRatingWriteToken
                     val rating = runCatching {
                         traktRatingsService.currentRating(id, _uiState.value.meta?.imdbId, type)
                     }.getOrNull()
-                    _uiState.update { state -> state.copy(userRating = rating) }
+                    // Don't clobber a rating the user set/cleared while this fetch
+                    // was in flight: skip if a rate()/clearRating() bumped the token
+                    // or an optimistic write is still pending.
+                    if (userRatingWriteToken == tokenAtStart && !_uiState.value.ratingPending) {
+                        _uiState.update { state -> state.copy(userRating = rating) }
+                    }
                 }
         }
     }
@@ -1601,6 +1610,10 @@ class MetaDetailsViewModel @Inject constructor(
 
     private fun selectSeason(season: Int) {
         val meta = _uiState.value.meta ?: return
+        // User explicitly picked a season — stop the watch-progress driven
+        // auto-switch (see updateNextToWatch) from yanking them back to the
+        // "next to watch" season while progress is still loading.
+        suppressSeasonAutoSwitch = true
         val episodes = getEpisodesForSeason(meta.videos, season)
         _uiState.update {
             it.copy(
@@ -2115,6 +2128,7 @@ class MetaDetailsViewModel @Inject constructor(
         val meta = _uiState.value.meta ?: return
         val previous = _uiState.value.userRating
         val traktRating = stars.coerceIn(1, 5) * 2
+        userRatingWriteToken++
         _uiState.update { it.copy(userRating = traktRating, ratingPending = true, showRatingPicker = false) }
         viewModelScope.launch {
             val ok = runCatching {
@@ -2128,6 +2142,7 @@ class MetaDetailsViewModel @Inject constructor(
     private fun clearRating() {
         val meta = _uiState.value.meta ?: return
         val previous = _uiState.value.userRating
+        userRatingWriteToken++
         _uiState.update { it.copy(userRating = null, ratingPending = true, showRatingPicker = false) }
         viewModelScope.launch {
             val ok = runCatching {

@@ -391,6 +391,12 @@ private fun PlayerRuntimeController.applySelectedStreamState(
  * of stream type — critical for next-episode binge matching.
  */
 private fun PlayerRuntimeController.applyStreamMetadata(stream: Stream) {
+    // Remember the source stream that is about to play. Every switch path
+    // (HTTP/torrent × source/episode) funnels through here, so this is the
+    // single point where the "currently playing source" is known. On a
+    // playback failure tryNextStream marks this stream's stable identity
+    // failed and the error path invalidates its resolved debrid link.
+    currentSourceStream = stream
     currentStreamBingeGroup = stream.behaviorHints?.bingeGroup
     currentVideoHash = stream.behaviorHints?.videoHash
     currentVideoSize = stream.behaviorHints?.videoSize
@@ -425,6 +431,30 @@ internal fun PlayerRuntimeController.commitPendingBingeGroupSave() {
     pendingBingeGroupSave = null
     scope.launch(kotlinx.coroutines.NonCancellable) {
         bingeGroupCacheDataStore.save(cid, bg)
+    }
+}
+
+/**
+ * A new episode is a clean slate. Drops the previous episode's source-stream
+ * list, its cache-gate key, and the failed-stream history so that
+ * [tryNextStream] reloads streams for the CURRENT episode instead of falling
+ * back to the previous episode's (now-wrong) source list.
+ *
+ * Note: [currentSourceStream] is intentionally NOT cleared here — the switch
+ * that triggers this already set it to the new episode's stream via
+ * [applyStreamMetadata].
+ */
+internal fun PlayerRuntimeController.resetSourceStreamsForEpisodeSwitch() {
+    sourceStreamsCacheRequestKey = null
+    failedStreamUrls.clear()
+    failedStreamKeys.clear()
+    _uiState.update {
+        it.copy(
+            sourceAllStreams = emptyList(),
+            sourceFilteredStreams = emptyList(),
+            sourceSelectedAddonFilter = null,
+            sourceAvailableAddons = emptyList()
+        )
     }
 }
 
@@ -1092,6 +1122,7 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(
     currentEpisode = targetVideo?.episode ?: _uiState.value.episodeStreamsEpisode ?: currentEpisode
     currentEpisodeTitle = targetVideo?.title ?: _uiState.value.episodeStreamsTitle ?: currentEpisodeTitle
     persistSelectedStreamForReuse(stream = stream, url = url, headers = newHeaders)
+    resetSourceStreamsForEpisodeSwitch()
     currentTraktEpisodeMapping = null
     currentTraktEpisodeMappingKey = null
     lastSavedPosition = 0L
@@ -1179,6 +1210,7 @@ private fun PlayerRuntimeController.switchToEpisodeStreamCommon(
     currentSeason = targetVideo?.season ?: _uiState.value.episodeStreamsSeason ?: currentSeason
     currentEpisode = targetVideo?.episode ?: _uiState.value.episodeStreamsEpisode ?: currentEpisode
     currentEpisodeTitle = targetVideo?.title ?: _uiState.value.episodeStreamsTitle ?: currentEpisodeTitle
+    resetSourceStreamsForEpisodeSwitch()
     currentTraktEpisodeMapping = null
     currentTraktEpisodeMappingKey = null
     lastSavedPosition = 0L

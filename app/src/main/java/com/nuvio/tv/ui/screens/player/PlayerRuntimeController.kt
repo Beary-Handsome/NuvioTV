@@ -359,6 +359,14 @@ class PlayerRuntimeController(
     internal var hasTriedDv7HevcFallback: Boolean = false
     internal var forceDv7ToHevc: Boolean = false
     internal val failedStreamUrls = mutableSetOf<String>()
+    // Stable identity keys of sources that already failed. Needed because
+    // torrent/direct-debrid sources expose no URL until they lazily resolve,
+    // so [failedStreamUrls] alone can never exclude them (see tryNextStream).
+    internal val failedStreamKeys = mutableSetOf<String>()
+    // The source Stream currently being played (or last attempted). Used to
+    // record its stable identity when playback fails and to invalidate its
+    // resolved debrid link.
+    internal var currentSourceStream: com.nuvio.tv.domain.model.Stream? = null
     internal var pendingBingeGroupSave: Pair<String, String>? = null
     internal var startupRetryCount: Int = 0
     internal var errorRetryCount: Int = 0

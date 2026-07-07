@@ -464,6 +464,16 @@ class SearchViewModel @Inject constructor(
                 }
                 is NetworkResult.Error -> {
                     if (uiState.value.submittedQuery.trim() != query) return@collect
+                    // Drop the shimmer placeholder for this failed catalog so it
+                    // doesn't shimmer forever. Removing the key from catalogOrder
+                    // makes updateCatalogRowsNow stop rendering the placeholder row
+                    // (mirrors Home's placeholderDescriptors removal on error).
+                    val key = catalogKey(
+                        addonId = addon.id,
+                        type = catalog.apiType,
+                        catalogId = catalog.id
+                    )
+                    catalogOrder.remove(key)
                     pendingCatalogResponses = (pendingCatalogResponses - 1).coerceAtLeast(0)
                     // Ignore per-catalog errors unless we have nothing to show.
                     if (catalogsMap.isEmpty()) {

@@ -28,6 +28,21 @@ internal fun PlayerRuntimeController.startInitialPlaybackIfNeeded() {
 
     val infoHash = navigationArgs.infoHash
     Log.d("PlayerStartup", "startInitialPlayback: infoHash=$infoHash, streamUrl=${initialStreamUrl.take(80)}")
+    // Remember the initial source's identity so that, if it fails, tryNextStream
+    // can exclude it when falling back to the freshly-loaded source list.
+    currentSourceStream = com.nuvio.tv.domain.model.Stream(
+        name = streamName,
+        title = null,
+        description = currentStreamDescription,
+        url = if (infoHash != null) null else currentStreamUrl,
+        ytId = null,
+        infoHash = infoHash,
+        fileIdx = navigationArgs.fileIdx,
+        externalUrl = null,
+        behaviorHints = null,
+        addonName = currentAddonName ?: "",
+        addonLogo = currentAddonLogo
+    )
     if (infoHash != null) {
         torrentStreamJob = scope.launch {
             try {

@@ -51,20 +51,28 @@ class LocalDebridAvailabilityService @Inject constructor(
         }.distinct()
         if (hashes.isEmpty()) return groups
 
-        // Check ALL configured providers in parallel
+        // Check ALL configured providers in parallel. Keep each provider's raw
+        // nullable result: null means the provider call failed / returned nothing
+        // definitive, which must NOT be conflated with a confirmed cache miss.
         val allResults = coroutineScope {
             accounts.map { account ->
                 async {
-                    val cached = localDebridService.checkCached(account = account, hashes = hashes)
-                    account to (cached ?: emptyMap())
+                    account to localDebridService.checkCached(account = account, hashes = hashes)
                 }
             }.map { it.await() }
         }
+
+        // If NO provider returned a definitive answer, the whole check was
+        // inconclusive (network timeout, rate-limit, empty response). In that
+        // case streams are marked UNKNOWN (below) rather than NOT_CACHED, so a
+        // transient failure can't permanently disable auto-play for them.
+        val anyProviderAnswered = allResults.any { (_, cached) -> cached != null }
 
         // Merge results: prefer the user's preferred provider, fall back to any that has it
         val preferredId = settings.activeResolverProviderId
         val mergedCache = mutableMapOf<String, CacheHit>()
         for ((account, cached) in allResults) {
+            if (cached == null) continue
             for ((hash, item) in cached) {
                 val existing = mergedCache[hash]
                 // Overwrite if no existing hit, or if this is the preferred provider
@@ -83,11 +91,18 @@ class LocalDebridAvailabilityService @Inject constructor(
             val hash = stream.localAvailabilityHash() ?: return@updateAvailabilityStatus stream
             if (stream.debridCacheStatus?.state in FINAL_CACHE_STATES) return@updateAvailabilityStatus stream
             val hit = mergedCache[hash]
+            val resolvedState = when {
+                hit != null -> StreamDebridCacheState.CACHED
+                // Only a definitive negative from a provider that actually
+                // answered counts as NOT_CACHED; an all-failed check is UNKNOWN.
+                anyProviderAnswered -> StreamDebridCacheState.NOT_CACHED
+                else -> StreamDebridCacheState.UNKNOWN
+            }
             stream.copy(
                 debridCacheStatus = StreamDebridCacheStatus(
                     providerId = hit?.providerId ?: fallbackAccount.provider.id,
                     providerName = hit?.providerName ?: fallbackAccount.provider.displayName,
-                    state = if (hit != null) StreamDebridCacheState.CACHED else StreamDebridCacheState.NOT_CACHED,
+                    state = resolvedState,
                     cachedName = hit?.item?.name,
                     cachedSize = hit?.item?.size
                 )

@@ -101,6 +101,18 @@ class DirectDebridResolver @Inject constructor(
         return getCachedResult(cacheKey)?.let { result -> stream.withResolvedDebridUrl(result) }
     }
 
+    /**
+     * Drops every resolved link from the in-memory resolve cache. Used when a
+     * playback failure signals a resolved debrid URL has gone stale: clearing
+     * everything (rather than a single key) guarantees the dead link is dropped
+     * for all stream types — including local-torrent resolves whose resolved
+     * form no longer carries the identity needed to recompute its cache key.
+     * Entries re-resolve lazily on next access.
+     */
+    suspend fun invalidateAll() {
+        mutex.withLock { resolvedCache.clear() }
+    }
+
     suspend fun resolveToPlayableStream(
         stream: Stream,
         season: Int?,

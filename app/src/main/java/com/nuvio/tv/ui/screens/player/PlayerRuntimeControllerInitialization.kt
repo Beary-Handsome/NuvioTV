@@ -648,9 +648,17 @@ internal fun PlayerRuntimeController.initializePlayer(
                                 streamLinkCacheDataStore.remove(reuseKey)
                             }
                         }
+                        // Drop resolved direct-debrid links from the in-memory
+                        // resolve cache too — otherwise a re-tap/retry would
+                        // replay the same dead URL for up to its 15-minute TTL.
+                        scope.launch(kotlinx.coroutines.NonCancellable) {
+                            directDebridResolver.invalidateAll()
+                        }
                         // Try switching to the next available stream before
-                        // showing the error to the user.
-                        if (tryNextStream()) {
+                        // showing the error to the user. Pass the error so that,
+                        // if an async re-scrape ultimately finds nothing, the
+                        // real playback error is what surfaces.
+                        if (tryNextStream(detailedError)) {
                             return
                         }
                         _uiState.update {

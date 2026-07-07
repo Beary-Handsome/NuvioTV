@@ -6,6 +6,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.HttpDataSource
 import com.nuvio.tv.R
+import com.nuvio.tv.domain.model.Stream
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
@@ -398,35 +399,73 @@ internal fun PlayerRuntimeController.tryDv7HevcFallback(
 }
 
 /**
+ * Computes a STABLE identity key for a stream so a failed source can be
+ * excluded even after it lazily resolves to a concrete URL.
+ *
+ * Torrent and direct-debrid sources expose no playable URL until they are
+ * resolved, and the debrid resolver preserves the infoHash / clientResolve
+ * identity across that resolve (only url/externalUrl/behaviorHints change).
+ * We therefore key on that preserved identity first and fall back to the
+ * concrete URL only for plain HTTP streams that carry no torrent/debrid id.
+ */
+internal fun Stream.stableFailureKey(): String {
+    val resolve = clientResolve
+    val identity = infoHash
+        ?: resolve?.infoHash
+        ?: resolve?.magnetUri
+        ?: resolve?.torrentName
+        ?: resolve?.filename
+    if (!identity.isNullOrBlank()) {
+        val fileIdxPart = (fileIdx ?: resolve?.fileIdx)?.toString().orEmpty()
+        val filenamePart = resolve?.filename.orEmpty().trim().lowercase()
+        return "id|${identity.trim().lowercase()}|$fileIdxPart|$filenamePart"
+    }
+    getStreamUrl()?.takeIf { it.isNotBlank() }?.let { return "url|$it" }
+    return "key|${stableKey()}"
+}
+
+/**
+ * Whether [stream] is a viable fallback in [tryNextStream]: playable, not
+ * external, and neither its concrete URL nor its stable identity has already
+ * failed.
+ */
+internal fun PlayerRuntimeController.isPlayableFallbackCandidate(stream: Stream): Boolean {
+    val streamUrl = stream.getStreamUrl()
+    val isPlayable = !streamUrl.isNullOrBlank() || stream.isTorrent() || stream.isDirectDebrid()
+    val notFailedByUrl = streamUrl.isNullOrBlank() || streamUrl !in failedStreamUrls
+    val notFailedByKey = stream.stableFailureKey() !in failedStreamKeys
+    return isPlayable && notFailedByUrl && notFailedByKey && !stream.isExternal()
+}
+
+/**
  * Attempts to switch to the next available stream that hasn't already failed.
  *
- * Marks the current stream URL as failed, then searches the source streams list
- * for the first playable stream whose URL is not in [failedStreamUrls].
- * If found, switches to it via [switchToSourceStream]. Otherwise, shows the
- * error to the user.
+ * Marks the current source as failed — by concrete URL AND by stable identity,
+ * so lazily-resolved torrent/direct-debrid sources (which have no URL yet) are
+ * not re-picked — then searches the source list for the first still-playable
+ * stream. If the source list hasn't loaded yet it re-scrapes asynchronously and
+ * keeps the recovery overlay up, surfacing [errorMessage] only if that also
+ * finds nothing.
  *
- * Returns `true` if a next stream was found and switching was initiated.
+ * Returns `true` if a switch was initiated or an async recovery is in flight,
+ * `false` if the source list is loaded but exhausted (caller shows the error).
  */
-internal fun PlayerRuntimeController.tryNextStream(): Boolean {
-    // Mark the current stream as failed
+internal fun PlayerRuntimeController.tryNextStream(errorMessage: String? = null): Boolean {
+    // Mark the current source as failed by both concrete URL and stable identity.
     val currentUrl = currentStreamUrl
     if (currentUrl.isNotBlank()) {
         failedStreamUrls.add(currentUrl)
     }
+    currentSourceStream?.let { failedStreamKeys.add(it.stableFailureKey()) }
 
     // Search available source streams for the first non-failed, playable stream
     val allStreams = _uiState.value.sourceAllStreams
-    val nextStream = allStreams.firstOrNull { stream ->
-        val streamUrl = stream.getStreamUrl()
-        val isPlayable = !streamUrl.isNullOrBlank() || stream.isTorrent() || stream.isDirectDebrid()
-        val notFailed = streamUrl.isNullOrBlank() || streamUrl !in failedStreamUrls
-        isPlayable && notFailed && !stream.isExternal()
-    }
+    val nextStream = allStreams.firstOrNull { isPlayableFallbackCandidate(it) }
 
     if (nextStream != null) {
         Log.w(
             PlayerRuntimeController.TAG,
-            "tryNextStream: switching to next stream (failed ${failedStreamUrls.size} so far)"
+            "tryNextStream: switching to next stream (failed ${failedStreamKeys.size} so far)"
         )
         resetErrorRetryState()
         _uiState.update { it.copy(error = null) }
@@ -434,33 +473,41 @@ internal fun PlayerRuntimeController.tryNextStream(): Boolean {
         return true
     }
 
-    // If we don't have source streams loaded yet, try loading them and then retry
+    // If we don't have source streams loaded yet, re-scrape and retry. Keep the
+    // recovery overlay visible and report recovery-in-progress so the caller
+    // does not flash the error overlay while the async load runs.
     if (allStreams.isEmpty()) {
         Log.w(
             PlayerRuntimeController.TAG,
             "tryNextStream: no source streams available, loading them"
         )
+        showRecoveryOverlay()
         scope.launch {
             loadSourceStreams(forceRefresh = false)
-            // After loading, try again with whatever arrived
-            val loadedStreams = _uiState.value.sourceAllStreams
-            val fallback = loadedStreams.firstOrNull { stream ->
-                val streamUrl = stream.getStreamUrl()
-                val isPlayable = !streamUrl.isNullOrBlank() || stream.isTorrent() || stream.isDirectDebrid()
-                val notFailed = streamUrl.isNullOrBlank() || streamUrl !in failedStreamUrls
-                isPlayable && notFailed && !stream.isExternal()
-            }
+            val fallback = _uiState.value.sourceAllStreams
+                .firstOrNull { isPlayableFallbackCandidate(it) }
             if (fallback != null) {
                 resetErrorRetryState()
                 _uiState.update { it.copy(error = null) }
                 switchToSourceStream(fallback)
+            } else {
+                // Recovery truly failed — now surface the error to the user.
+                _uiState.update {
+                    it.copy(
+                        error = errorMessage
+                            ?: context.getString(R.string.player_error_playback_fallback),
+                        showLoadingOverlay = false,
+                        showPauseOverlay = false
+                    )
+                }
             }
         }
+        return true
     }
 
     Log.w(
         PlayerRuntimeController.TAG,
-        "tryNextStream: no more streams available (failed ${failedStreamUrls.size})"
+        "tryNextStream: no more streams available (failed ${failedStreamKeys.size})"
     )
     return false
 }

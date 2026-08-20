@@ -49,6 +49,10 @@ private const val TAG = "StreamScreenViewModel"
 private const val EMBEDDED_STREAM_GROUP_NAME = "Embedded Streams"
 private const val EMBEDDED_STREAM_FALLBACK_NAME = "Embed Stream"
 private const val DIRECT_AUTOPLAY_HARD_TIMEOUT_MS = 60_000L
+// Upper bound on how many streams a single resolve request will walk before
+// giving up. Combined with the per-request tried-set this guarantees the
+// auto-advance loop always terminates.
+private const val MAX_DEBRID_RESOLVE_ATTEMPTS = 8
 
 @HiltViewModel
 class StreamScreenViewModel @Inject constructor(
@@ -68,6 +72,9 @@ class StreamScreenViewModel @Inject constructor(
     private var autoPlayHandledForSession = false
     private var directAutoPlayModeInitializedForSession = false
     private var directAutoPlayFlowEnabledForSession = false
+    // Latch: the exhausted-resolve fallback may re-scrape (loadStreams) at most
+    // once per VM session, so auto-play can never loop back onto dead links.
+    private var staleRecoveryRescanned = false
     private var streamLoadJob: Job? = null
     private var sourceChipErrorDismissJob: Job? = null
     private var pendingCacheSaveJob: Job? = null
@@ -864,9 +871,72 @@ class StreamScreenViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Resolves a stream to a playable [StreamPlaybackInfo], auto-advancing through
+     * the current stream list when a resolve is recoverable-failed (Stale/NotCached/
+     * Error) so we land on a working source instead of dead-ending on the top one.
+     *
+     * Termination is guaranteed two ways: [tried] excludes every stream already
+     * attempted (and stableKey() is stable across cache-badge demotions), and the
+     * attempt count is hard-capped at [MAX_DEBRID_RESOLVE_ATTEMPTS]. Once the list
+     * is exhausted we re-scrape at most once ([staleRecoveryRescanned] latch) and
+     * then only surface an honest message — so auto-play can never spin.
+     */
     suspend fun resolveStreamForPlayback(stream: Stream): StreamPlaybackInfo? {
+        val tried = LinkedHashSet<String>()
+        var current: Stream? = stream
+        var attempts = 0
+        while (attempts < MAX_DEBRID_RESOLVE_ATTEMPTS) {
+            val candidate = current ?: break
+            attempts++
+            tried.add(candidate.stableKey())
+            when (val outcome = resolveSingleStream(candidate)) {
+                is StreamResolveOutcome.Resolved -> {
+                    updateUiStateIfChanged {
+                        it.copy(
+                            showDirectAutoPlayOverlay = false,
+                            directAutoPlayMessage = null
+                        )
+                    }
+                    return outcome.info
+                }
+                StreamResolveOutcome.Fatal -> return null
+                is StreamResolveOutcome.Recoverable -> {
+                    // Bust the 15-min resolve cache so a later retry re-polls the
+                    // provider instead of replaying the dead link.
+                    directDebridResolver.invalidateAll()
+                    // RC4: stop badging this dead source CACHED in the list.
+                    demoteStreamCacheBadge(candidate, outcome.demoteTo)
+                    current = nextResolveCandidate(tried)
+                }
+            }
+        }
+
+        // Every viable source failed. As a last resort re-scrape ONCE — the addons
+        // send no cache headers so this is a genuine re-fetch — then fall back to an
+        // honest message. The monotonic latch means we never re-scrape again, so
+        // even if the re-scrape re-arms auto-play onto another dead link the next
+        // exhaustion just shows the message.
+        val refresh = !staleRecoveryRescanned
+        if (refresh) staleRecoveryRescanned = true
+        showDirectDebridPlaybackError(
+            context.getString(R.string.debrid_all_sources_failed),
+            refreshStreams = refresh
+        )
+        return null
+    }
+
+    private sealed interface StreamResolveOutcome {
+        data class Resolved(val info: StreamPlaybackInfo) : StreamResolveOutcome
+        // A hard failure that has already surfaced its own error; stop advancing.
+        data object Fatal : StreamResolveOutcome
+        // A recoverable miss; [demoteTo] is the cache badge to apply before advancing.
+        data class Recoverable(val demoteTo: StreamDebridCacheState) : StreamResolveOutcome
+    }
+
+    private suspend fun resolveSingleStream(stream: Stream): StreamResolveOutcome {
         if (!directDebridResolver.shouldResolveToPlayableStream(stream)) {
-            return getStreamForPlayback(stream)
+            return StreamResolveOutcome.Resolved(getStreamForPlayback(stream))
         }
 
         updateUiStateIfChanged {
@@ -879,13 +949,7 @@ class StreamScreenViewModel @Inject constructor(
 
         val basePlaybackInfo = getStreamForPlayback(stream)
         return when (val result = directDebridResolver.resolve(stream, season, episode)) {
-            is DirectDebridResolveResult.Success -> {
-                updateUiStateIfChanged {
-                    it.copy(
-                        showDirectAutoPlayOverlay = false,
-                        directAutoPlayMessage = null
-                    )
-                }
+            is DirectDebridResolveResult.Success -> StreamResolveOutcome.Resolved(
                 basePlaybackInfo.copy(
                     url = result.url,
                     isExternal = false,
@@ -895,37 +959,55 @@ class StreamScreenViewModel @Inject constructor(
                     filename = result.filename ?: basePlaybackInfo.filename,
                     videoSize = result.videoSize ?: basePlaybackInfo.videoSize
                 )
-            }
+            )
             DirectDebridResolveResult.MissingApiKey -> {
                 showDirectDebridPlaybackError(context.getString(R.string.debrid_missing_api_key), refreshStreams = false)
-                null
+                StreamResolveOutcome.Fatal
             }
-            DirectDebridResolveResult.NotCached -> {
-                // Don't show a disruptive error — just dismiss the overlay
-                // so the user can quickly tap the next stream
-                updateUiStateIfChanged {
-                    it.copy(
-                        showDirectAutoPlayOverlay = false,
-                        directAutoPlayMessage = null,
-                        playbackErrorMessage = context.getString(R.string.debrid_not_cached)
-                    )
+            // Authoritative miss (e.g. Torbox 409): mark the source not cached.
+            DirectDebridResolveResult.NotCached ->
+                StreamResolveOutcome.Recoverable(StreamDebridCacheState.NOT_CACHED)
+            // Poll timeout / evicted link: unknown, retryable — demote to unverified.
+            DirectDebridResolveResult.Stale ->
+                StreamResolveOutcome.Recoverable(StreamDebridCacheState.UNKNOWN)
+            DirectDebridResolveResult.Error ->
+                StreamResolveOutcome.Recoverable(StreamDebridCacheState.UNKNOWN)
+        }
+    }
+
+    /**
+     * First stream we haven't [tried] yet that still looks viable: not an
+     * authoritative NOT_CACHED miss, and either directly playable or resolvable
+     * to a debrid link.
+     */
+    private fun nextResolveCandidate(tried: Set<String>): Stream? =
+        _uiState.value.filteredStreams.firstOrNull { candidate ->
+            candidate.stableKey() !in tried &&
+                candidate.debridCacheStatus?.state != StreamDebridCacheState.NOT_CACHED &&
+                (candidate.getStreamUrl() != null || candidate.isReadyForDebridPreparation())
+        }
+
+    /**
+     * Flips a stream's debrid cache badge so the list stops showing a dead source
+     * as CACHED (RC4). stableKey() is independent of the badge, so this never
+     * disturbs the tried-set identity used by the resolve loop.
+     */
+    private fun demoteStreamCacheBadge(target: Stream, state: StreamDebridCacheState) {
+        val targetKey = target.stableKey()
+        fun Stream.demoted(): Stream {
+            if (stableKey() != targetKey) return this
+            val status = debridCacheStatus ?: return this
+            if (status.state == state) return this
+            return copy(debridCacheStatus = status.copy(state = state))
+        }
+        updateUiStateIfChanged { s ->
+            s.copy(
+                allStreams = s.allStreams.map { it.demoted() },
+                filteredStreams = s.filteredStreams.map { it.demoted() },
+                addonStreams = s.addonStreams.map { group ->
+                    group.copy(streams = group.streams.map { it.demoted() })
                 }
-                null
-            }
-            DirectDebridResolveResult.Stale -> {
-                updateUiStateIfChanged {
-                    it.copy(
-                        showDirectAutoPlayOverlay = false,
-                        directAutoPlayMessage = null,
-                        playbackErrorMessage = context.getString(R.string.debrid_stale_stream)
-                    )
-                }
-                null
-            }
-            DirectDebridResolveResult.Error -> {
-                showDirectDebridPlaybackError(context.getString(R.string.debrid_resolution_failed), refreshStreams = false)
-                null
-            }
+            )
         }
     }
 

@@ -64,6 +64,7 @@ import javax.inject.Inject
 
 private const val TAG = "StreamScreenViewModel"
 private const val DIRECT_AUTOPLAY_HARD_TIMEOUT_MS = 60_000L
+private const val MAX_DEBRID_RESOLVE_ATTEMPTS = 8
 
 @HiltViewModel
 class StreamScreenViewModel @Inject constructor(
@@ -92,6 +93,7 @@ class StreamScreenViewModel @Inject constructor(
     private var autoPlayHandledForSession = false
     private var directAutoPlayModeInitializedForSession = false
     private var directAutoPlayFlowEnabledForSession = false
+    private var staleRecoveryRescanned = false
     private var isTorrentStreamStarted = false
     private var streamLoadJob: Job? = null
     private var streamLoadScope: kotlinx.coroutines.CoroutineScope? = null
@@ -1114,9 +1116,41 @@ class StreamScreenViewModel @Inject constructor(
     }
 
     suspend fun resolveStreamForPlayback(stream: Stream): StreamPlaybackInfo? {
+        val tried = LinkedHashSet<String>()
+        var candidate: Stream? = stream
+        repeat(MAX_DEBRID_RESOLVE_ATTEMPTS) {
+            val current = candidate ?: return@repeat
+            tried += current.stableKey()
+            when (val outcome = resolveSingleStream(current)) {
+                is StreamResolveOutcome.Resolved -> return outcome.info
+                StreamResolveOutcome.Fatal -> return null
+                is StreamResolveOutcome.Recoverable -> {
+                    directDebridResolver.invalidateAll()
+                    demoteStreamCacheBadge(current, outcome.demoteTo)
+                    candidate = nextResolveCandidate(tried)
+                }
+            }
+        }
+
+        val refresh = !staleRecoveryRescanned
+        staleRecoveryRescanned = true
+        showDirectDebridPlaybackError(
+            context.getString(R.string.debrid_all_sources_failed),
+            refreshStreams = refresh
+        )
+        return null
+    }
+
+    private sealed interface StreamResolveOutcome {
+        data class Resolved(val info: StreamPlaybackInfo) : StreamResolveOutcome
+        data object Fatal : StreamResolveOutcome
+        data class Recoverable(val demoteTo: StreamDebridCacheState) : StreamResolveOutcome
+    }
+
+    private suspend fun resolveSingleStream(stream: Stream): StreamResolveOutcome {
         if (!directDebridResolver.shouldResolveToPlayableStream(stream)) {
             Log.d(TAG, "resolveStreamForPlayback: no debrid resolve needed, using direct URL")
-            return getStreamForPlayback(stream)
+            return StreamResolveOutcome.Resolved(getStreamForPlayback(stream))
         }
 
         Log.d(TAG, "resolveStreamForPlayback: starting debrid resolve for stream=${stream.name} addon=${stream.addonName}")
@@ -1180,24 +1214,43 @@ class StreamScreenViewModel @Inject constructor(
                         )
                     }
                 }
-                resolved
+                StreamResolveOutcome.Resolved(resolved)
             }
             DirectDebridResolveResult.MissingApiKey -> {
                 showDirectDebridPlaybackError(context.getString(R.string.debrid_missing_api_key), refreshStreams = false)
-                null
+                StreamResolveOutcome.Fatal
             }
-            DirectDebridResolveResult.NotCached -> {
-                showDirectDebridPlaybackError(context.getString(R.string.debrid_not_cached), refreshStreams = false)
-                null
-            }
-            DirectDebridResolveResult.Stale -> {
-                showDirectDebridPlaybackError(context.getString(R.string.debrid_stale_stream), refreshStreams = true)
-                null
-            }
-            DirectDebridResolveResult.Error -> {
-                showDirectDebridPlaybackError(context.getString(R.string.debrid_resolution_failed), refreshStreams = false)
-                null
-            }
+            DirectDebridResolveResult.NotCached ->
+                StreamResolveOutcome.Recoverable(StreamDebridCacheState.NOT_CACHED)
+            DirectDebridResolveResult.Stale ->
+                StreamResolveOutcome.Recoverable(StreamDebridCacheState.UNKNOWN)
+            DirectDebridResolveResult.Error ->
+                StreamResolveOutcome.Recoverable(StreamDebridCacheState.UNKNOWN)
+        }
+    }
+
+    private fun nextResolveCandidate(tried: Set<String>): Stream? =
+        _uiState.value.filteredStreams.firstOrNull { candidate ->
+            candidate.stableKey() !in tried &&
+                candidate.debridCacheStatus?.state != StreamDebridCacheState.NOT_CACHED &&
+                (candidate.getStreamUrl() != null || candidate.isReadyForDebridPreparation())
+        }
+
+    private fun demoteStreamCacheBadge(target: Stream, state: StreamDebridCacheState) {
+        val targetKey = target.stableKey()
+        fun Stream.demoted(): Stream {
+            if (stableKey() != targetKey) return this
+            val status = debridCacheStatus ?: return this
+            return if (status.state == state) this else copy(debridCacheStatus = status.copy(state = state))
+        }
+        updateUiStateIfChanged { current ->
+            current.copy(
+                allStreams = current.allStreams.map { it.demoted() },
+                filteredStreams = current.filteredStreams.map { it.demoted() },
+                addonStreams = current.addonStreams.map { group ->
+                    group.copy(streams = group.streams.map { it.demoted() })
+                }
+            )
         }
     }
 

@@ -268,6 +268,20 @@ class StreamAutoPlaySelectorTest {
         assertEquals(listOf(regular, cachedDebrid), ordered)
     }
 
+    @Test
+    fun `orderAddonStreams uses health within otherwise equivalent provider groups`() {
+        val slowPlugin = addonStreams("SlowPlugin")
+        val reliablePlugin = addonStreams("ReliablePlugin")
+
+        val ordered = StreamAutoPlaySelector.orderAddonStreams(
+            streams = listOf(slowPlugin, reliablePlugin),
+            installedOrder = emptyList(),
+            providerHealthScores = mapOf("SlowPlugin" to 15, "ReliablePlugin" to 92)
+        )
+
+        assertEquals(listOf(reliablePlugin, slowPlugin), ordered)
+    }
+
     private fun stream(
         addonName: String,
         url: String? = null,

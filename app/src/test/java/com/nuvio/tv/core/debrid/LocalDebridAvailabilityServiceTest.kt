@@ -79,7 +79,7 @@ class LocalDebridAvailabilityServiceTest {
         return LocalDebridAvailabilityService(
             dataStore,
             localDebridService,
-            com.nuvio.tv.core.streams.StreamDiagnostics()
+            com.nuvio.tv.core.streams.StreamDiagnostics(mockk(relaxed = true))
         )
     }
 

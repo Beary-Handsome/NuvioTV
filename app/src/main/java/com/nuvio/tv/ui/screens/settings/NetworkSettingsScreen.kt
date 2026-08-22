@@ -171,9 +171,11 @@ private suspend fun fetchFastComUrls(context: android.content.Context): List<Str
 fun AdvancedSettingsContent(
     initialFocusRequester: FocusRequester? = null,
     viewModel: AdvancedSettingsViewModel = hiltViewModel(),
+    diagnosticsViewModel: DebugSettingsViewModel = hiltViewModel(),
     experienceModeViewModel: ExperienceModeSettingsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val diagnosticsState by diagnosticsViewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var connectionType by remember { mutableStateOf(getConnectionType(context)) }
     var testState by remember { mutableStateOf(NetworkTestState.Idle) }
@@ -488,6 +490,46 @@ fun AdvancedSettingsContent(
                 color = NuvioTheme.colors.TextTertiary,
                 modifier = Modifier.padding(top = NuvioTheme.spacing.xs)
             )
+        }
+
+        item(key = "stream_provider_health") {
+            SettingsGroupCard(modifier = Modifier.fillMaxWidth()) {
+                if (diagnosticsState.streamProviderHealth.isEmpty()) {
+                    SettingsActionRow(
+                        title = "Stream provider health",
+                        subtitle = "Open a movie or episode to collect provider results.",
+                        onClick = {}
+                    )
+                } else {
+                    diagnosticsState.streamProviderHealth.take(8).forEach { health ->
+                        SettingsActionRow(
+                            title = health.provider,
+                            subtitle = "${health.successes} successful, ${health.failures} failed, ${health.averageLatencyMs} ms average",
+                            value = "${health.score}/100",
+                            onClick = {}
+                        )
+                    }
+                }
+            }
+        }
+
+        if (diagnosticsState.streamDiagnostics.isNotEmpty()) {
+            item(key = "stream_provider_events") {
+                SettingsGroupCard(modifier = Modifier.fillMaxWidth()) {
+                    diagnosticsState.streamDiagnostics.take(10).forEach { event ->
+                        SettingsActionRow(
+                            title = "${event.provider} - ${event.stage.name.lowercase()}",
+                            subtitle = buildString {
+                                append(event.outcome).append(" | ").append(event.elapsedMs).append(" ms")
+                                append(" | ").append(event.resultCount).append(" results")
+                                event.statusCode?.let { append(" | HTTP ").append(it) }
+                                event.detail?.takeIf { it.isNotBlank() }?.let { append(" | ").append(it.take(100)) }
+                            },
+                            onClick = {}
+                        )
+                    }
+                }
+            }
         }
 
         item(key = "playback_issue_reports") {

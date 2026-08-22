@@ -10,6 +10,7 @@ import com.nuvio.tv.core.debrid.DirectDebridStreamPreparer
 import com.nuvio.tv.core.cloud.CloudLibraryPlaybackSessionStore
 import com.nuvio.tv.core.cloud.CloudLibraryPlaybackProgressStore
 import com.nuvio.tv.core.cloud.CloudLibraryRepository
+import com.nuvio.tv.core.streams.StreamDiagnostics
 import com.nuvio.tv.core.plugin.PluginManager
 import com.nuvio.tv.core.tracking.TrackingScrobbleCoordinator
 import com.nuvio.tv.core.torrent.TorrentService
@@ -70,6 +71,7 @@ class PlayerViewModel @Inject constructor(
     private val cloudPlaybackProgressStore: CloudLibraryPlaybackProgressStore,
     private val cloudPlaybackSessionStore: CloudLibraryPlaybackSessionStore,
     private val streamBadgePresentation: com.nuvio.tv.core.streams.StreamBadgePresentation,
+    private val streamDiagnostics: StreamDiagnostics,
     private val playbackIssueReportRepository: com.nuvio.tv.data.repository.PlaybackIssueReportRepository,
     private val externalPlaybackTracker: com.nuvio.tv.core.player.ExternalPlaybackTracker,
     private val subtitleFileCache: com.nuvio.tv.core.player.SubtitleFileCache,
@@ -115,6 +117,7 @@ class PlayerViewModel @Inject constructor(
         cloudPlaybackProgressStore = cloudPlaybackProgressStore,
         cloudPlaybackSessionStore = cloudPlaybackSessionStore,
         streamBadgePresentation = streamBadgePresentation,
+        streamDiagnostics = streamDiagnostics,
         playbackIssueReportRepository = playbackIssueReportRepository,
         tvRecommendationManager = tvRecommendationManager,
         savedStateHandle = savedStateHandle,

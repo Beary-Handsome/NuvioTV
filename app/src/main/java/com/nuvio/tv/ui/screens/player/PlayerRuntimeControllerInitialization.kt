@@ -1287,6 +1287,18 @@ internal fun PlayerRuntimeController.initializePlayer(
                     override fun onRenderedFirstFrame() {
                         val isFirstFrame = !hasRenderedFirstFrame  // capture BEFORE flipping
                         hasRenderedFirstFrame = true
+                        if (isFirstFrame) {
+                            streamDiagnostics.record(
+                                com.nuvio.tv.core.streams.StreamProviderDiagnostic(
+                                    provider = currentSourceStream?.addonName ?: "Direct playback",
+                                    stage = com.nuvio.tv.core.streams.StreamDiagnosticStage.PLAYBACK,
+                                    elapsedMs = 0L,
+                                    resultCount = 1,
+                                    outcome = "playback_success",
+                                    detail = currentSourceStream?.title ?: currentFilename
+                                )
+                            )
+                        }
                         mediaSourceFactory.unlockStartupPrefetch()
                         if (isFirstFrame && _uiState.value.postPlayDismissedForCurrentEpisode) {
                             _uiState.update { it.copy(postPlayDismissedForCurrentEpisode = false) }

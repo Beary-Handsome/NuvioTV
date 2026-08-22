@@ -308,10 +308,10 @@ class LibraryViewModel @Inject constructor(
     fun ensureCloudLibraryLoaded() {
         val current = _uiState.value.cloudLibrary
         if (current.isLoaded || current.isRefreshing) return
-        refreshCloudLibrary()
+        refreshCloudLibrary(force = false)
     }
 
-    fun refreshCloudLibrary() {
+    fun refreshCloudLibrary(force: Boolean = true) {
         val current = _uiState.value.cloudLibrary
         if (current.isRefreshing) return
         cloudRefreshJob = viewModelScope.launch {
@@ -324,7 +324,7 @@ class LibraryViewModel @Inject constructor(
                 )
             }
             runCatching {
-                cloudLibraryRepository.refresh()
+                cloudLibraryRepository.refresh(force = force)
             }.onSuccess { refreshed ->
                 _uiState.update { state ->
                     state.copy(cloudLibrary = refreshed).withVisibleCloudItems()

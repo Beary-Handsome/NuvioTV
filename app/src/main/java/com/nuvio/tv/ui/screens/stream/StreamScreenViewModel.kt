@@ -26,6 +26,7 @@ import com.nuvio.tv.core.tracking.TrackingScrobbleCoordinator
 import com.nuvio.tv.core.tracking.TrackingScrobbleEvent
 import com.nuvio.tv.core.tracking.buildTrackingMediaReference
 import com.nuvio.tv.core.streams.StreamBadgePresentation
+import com.nuvio.tv.core.streams.StreamDiagnostics
 import com.nuvio.tv.data.local.PlayerPreference
 import com.nuvio.tv.data.local.PlayerSettings
 import com.nuvio.tv.data.local.PlayerSettingsDataStore
@@ -95,6 +96,7 @@ class StreamScreenViewModel @Inject constructor(
     private val subtitleFileCache: com.nuvio.tv.core.player.SubtitleFileCache,
     private val torrentService: TorrentService,
     private val cloudLibraryRepository: CloudLibraryRepository,
+    private val streamDiagnostics: StreamDiagnostics,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
     private var autoPlayHandledForSession = false
@@ -484,7 +486,8 @@ class StreamScreenViewModel @Inject constructor(
             fun applySuccess(addonStreamGroups: List<AddonStreams>, isAllLoaded: Boolean) {
                 val orderedAddonStreams = StreamAutoPlaySelector.orderAddonStreams(
                     addonStreamGroups,
-                    installedAddonOrder
+                    installedAddonOrder,
+                    streamDiagnostics.providerHealth.value.associate { it.provider to it.score }
                 )
 
                 // Preserve badges already computed by prior badge jobs so they
@@ -711,7 +714,9 @@ class StreamScreenViewModel @Inject constructor(
                                 // match is found we can start playback immediately
                                 // without waiting for the full timeout.
                                 val orderedStreams = StreamAutoPlaySelector.orderAddonStreams(
-                                    mergedResult, installedAddonOrder
+                                    mergedResult,
+                                    installedAddonOrder,
+                                    streamDiagnostics.providerHealth.value.associate { it.provider to it.score }
                                 )
                                 val allStreams = orderedStreams.flatMap { it.streams }
                                 val earlyMatch = StreamAutoPlaySelector.selectAutoPlayStream(

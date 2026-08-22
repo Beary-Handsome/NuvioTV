@@ -10,7 +10,8 @@ import com.nuvio.tv.domain.model.StreamDebridCacheState
 object StreamAutoPlaySelector {
     fun orderAddonStreams(
         streams: List<AddonStreams>,
-        installedOrder: List<String>
+        installedOrder: List<String>,
+        providerHealthScores: Map<String, Int> = emptyMap()
     ): List<AddonStreams> {
         if (streams.isEmpty()) return streams
 
@@ -27,10 +28,16 @@ object StreamAutoPlaySelector {
         val (directDebridEntries, remainingEntries) = nonCloudEntries.partition {
             it.streams.any { stream -> stream.isDirectDebrid() }
         }
-        if (installedOrder.isEmpty()) return cloudEntries + directDebridEntries + remainingEntries
         val (addonEntries, pluginEntries) = remainingEntries.partition { it.addonName in addonRankByName }
-        val orderedAddons = addonEntries.sortedBy { addonRankByName.getValue(it.addonName) }
-        return cloudEntries + directDebridEntries + orderedAddons + pluginEntries
+        val healthScore: (AddonStreams) -> Int = { entry -> providerHealthScores[entry.addonName] ?: 50 }
+        val orderedAddons = addonEntries.sortedWith(
+            compareBy<AddonStreams> { addonRankByName.getValue(it.addonName) }
+                .thenByDescending(healthScore)
+        )
+        val healthyPlugins = pluginEntries.sortedByDescending(healthScore)
+        return cloudEntries.sortedByDescending(healthScore) +
+            directDebridEntries.sortedByDescending(healthScore) +
+            orderedAddons + healthyPlugins
     }
 
     private fun isPlayable(stream: Stream): Boolean {

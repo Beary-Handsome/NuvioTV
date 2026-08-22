@@ -131,7 +131,7 @@ class StreamRepositoryPluginIsolationTest {
                 tmdbService = tmdbService,
                 debridStreamPresentation = presentation,
                 localDebridAvailabilityService = availability,
-                streamDiagnostics = com.nuvio.tv.core.streams.StreamDiagnostics()
+                streamDiagnostics = com.nuvio.tv.core.streams.StreamDiagnostics(mockk(relaxed = true))
             ),
             api = api,
             tmdbService = tmdbService

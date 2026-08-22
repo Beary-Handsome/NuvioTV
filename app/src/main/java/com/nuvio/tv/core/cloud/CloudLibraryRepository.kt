@@ -23,6 +23,7 @@ import kotlinx.coroutines.coroutineScope
 class CloudLibraryRepository @Inject constructor(
     @ApplicationContext private val context: Context,
     private val dataStore: DebridSettingsDataStore,
+    private val indexStore: CloudLibraryIndexStore,
     torboxApi: TorboxCloudLibraryProviderApi,
     premiumizeApi: PremiumizeCloudLibraryProviderApi,
     realDebridApi: RealDebridCloudLibraryProviderApi,
@@ -35,11 +36,14 @@ class CloudLibraryRepository @Inject constructor(
         allDebridApi
     )
 
-    suspend fun refresh(): CloudLibraryUiState {
+    suspend fun refresh(force: Boolean = false): CloudLibraryUiState {
         val settings = dataStore.settings.first()
         if (!settings.cloudLibraryEnabled) {
             return CloudLibraryUiState(isLoaded = true, isEnabled = false)
         }
+        if (!force) indexStore.load(FRESH_INDEX_AGE_MS)?.let { return it }
+
+        val previousByProvider = indexStore.load()?.providers?.associateBy { it.providerId }.orEmpty()
 
         val credentials = DebridProviders.configuredServices(settings)
             .filter { credential -> credential.provider.supports(DebridProviderCapability.CloudLibrary) }
@@ -67,7 +71,8 @@ class CloudLibraryRepository @Inject constructor(
                     onFailure = { error ->
                         CloudLibraryProviderState(
                             provider = credential.provider,
-                            errorMessage = error.message
+                            errorMessage = error.message,
+                            items = previousByProvider[credential.provider.id]?.items.orEmpty()
                         )
                     }
                 )
@@ -78,7 +83,7 @@ class CloudLibraryRepository @Inject constructor(
             isEnabled = true,
             isRefreshing = false,
             providers = providerStates
-        )
+        ).also(indexStore::save)
     }
 
     suspend fun resolvePlayback(
@@ -167,5 +172,6 @@ class CloudLibraryRepository @Inject constructor(
 
     private companion object {
         const val MAX_CLOUD_STREAM_MATCHES = 30
+        const val FRESH_INDEX_AGE_MS = 5 * 60 * 1000L
     }
 }

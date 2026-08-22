@@ -7,6 +7,7 @@ import com.nuvio.tv.R
 import com.nuvio.tv.core.auth.AuthManager
 import com.nuvio.tv.core.streams.StreamDiagnostics
 import com.nuvio.tv.core.streams.StreamProviderDiagnostic
+import com.nuvio.tv.core.streams.StreamProviderHealth
 import com.nuvio.tv.data.local.DebugSettingsDataStore
 import com.nuvio.tv.data.local.LayoutPreferenceDataStore
 import com.nuvio.tv.data.local.LibraryPreferences
@@ -72,6 +73,11 @@ class DebugSettingsViewModel @Inject constructor(
         viewModelScope.launch {
             streamDiagnostics.events.collectLatest { events ->
                 _uiState.update { it.copy(streamDiagnostics = events) }
+            }
+        }
+        viewModelScope.launch {
+            streamDiagnostics.providerHealth.collectLatest { health ->
+                _uiState.update { it.copy(streamProviderHealth = health) }
             }
         }
     }
@@ -192,7 +198,8 @@ data class DebugSettingsUiState(
     val generateLibraryResult: String? = null,
     val signInLoading: Boolean = false,
     val signInResult: String? = null,
-    val streamDiagnostics: List<StreamProviderDiagnostic> = emptyList()
+    val streamDiagnostics: List<StreamProviderDiagnostic> = emptyList(),
+    val streamProviderHealth: List<StreamProviderHealth> = emptyList()
 )
 
 sealed class DebugSettingsEvent {

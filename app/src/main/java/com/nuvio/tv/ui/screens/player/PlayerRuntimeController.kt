@@ -13,6 +13,7 @@ import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.decoder.ffmpeg.FfmpegAudioRenderer
 import com.nuvio.tv.core.player.BitrateAwareLoadControl
 import com.nuvio.tv.core.player.LastPlaybackDiagnostics
+import com.nuvio.tv.core.streams.StreamDiagnostics
 import com.nuvio.tv.core.debrid.DirectDebridResolver
 import com.nuvio.tv.core.debrid.DirectDebridStreamPreparer
 import com.nuvio.tv.core.cloud.CloudLibraryPlaybackContext
@@ -94,6 +95,7 @@ class PlayerRuntimeController(
     internal val cloudPlaybackProgressStore: CloudLibraryPlaybackProgressStore,
     internal val cloudPlaybackSessionStore: CloudLibraryPlaybackSessionStore,
     internal val streamBadgePresentation: com.nuvio.tv.core.streams.StreamBadgePresentation,
+    internal val streamDiagnostics: StreamDiagnostics,
     internal val playbackIssueReportRepository: PlaybackIssueReportRepository,
     internal val tvRecommendationManager: com.nuvio.tv.core.recommendations.TvRecommendationManager,
     savedStateHandle: SavedStateHandle,

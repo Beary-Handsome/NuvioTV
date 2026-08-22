@@ -226,7 +226,11 @@ internal fun PlayerRuntimeController.loadSourceStreams(forceRefresh: Boolean) {
         ).collect { result ->
             when (result) {
                 is NetworkResult.Success -> {
-                    val addonStreams = StreamAutoPlaySelector.orderAddonStreams(result.data, installedAddonOrder)
+                    val addonStreams = StreamAutoPlaySelector.orderAddonStreams(
+                        result.data,
+                        installedAddonOrder,
+                        streamDiagnostics.providerHealth.value.associate { it.provider to it.score }
+                    )
                     val allStreams = addonStreams.flatMap { it.streams }
                     val availableAddons = addonStreams.map { it.addonName }
                     _uiState.update {
@@ -823,6 +827,16 @@ internal fun PlayerRuntimeController.tryNextStreamAfterPlaybackFailure(
     currentStreamUrl.takeIf { it.isNotBlank() }?.let(failedStreamUrls::add)
     val failedSource = currentSourceStream
         ?: _uiState.value.sourceAllStreams.firstOrNull { it.getStreamUrl() == currentStreamUrl }
+    streamDiagnostics.record(
+        com.nuvio.tv.core.streams.StreamProviderDiagnostic(
+            provider = failedSource?.addonName ?: "Direct playback",
+            stage = com.nuvio.tv.core.streams.StreamDiagnosticStage.PLAYBACK,
+            elapsedMs = 0L,
+            resultCount = 0,
+            outcome = "playback_failure",
+            detail = detailedError.take(200)
+        )
+    )
     failedSource?.let { failedStreamKeys += it.stableKey() }
     streamCacheKey?.let { key ->
         scope.launch(kotlinx.coroutines.NonCancellable) { streamLinkCacheDataStore.remove(key) }
@@ -1119,7 +1133,11 @@ internal fun PlayerRuntimeController.loadStreamsForEpisode(video: Video, forceRe
         ).collect { result ->
             when (result) {
                 is NetworkResult.Success -> {
-                    val addonStreams = StreamAutoPlaySelector.orderAddonStreams(result.data, installedAddonOrder)
+                    val addonStreams = StreamAutoPlaySelector.orderAddonStreams(
+                        result.data,
+                        installedAddonOrder,
+                        streamDiagnostics.providerHealth.value.associate { it.provider to it.score }
+                    )
                     val allStreams = addonStreams.flatMap { it.streams }
                     val availableAddons = addonStreams.map { it.addonName }
                     val selectedAddon = previousAddonFilter?.takeIf { it in availableAddons }
@@ -1685,7 +1703,11 @@ internal fun PlayerRuntimeController.playNextEpisode(userInitiated: Boolean = fa
             val searchSettled = CompletableDeferred<Unit>()
 
             fun trySelectStream(data: List<AddonStreams>): Stream? {
-                val orderedStreams = StreamAutoPlaySelector.orderAddonStreams(data, installedAddonOrder)
+                val orderedStreams = StreamAutoPlaySelector.orderAddonStreams(
+                    data,
+                    installedAddonOrder,
+                    streamDiagnostics.providerHealth.value.associate { it.provider to it.score }
+                )
                 val allStreams = orderedStreams.flatMap { it.streams }
                 return StreamAutoPlaySelector.selectAutoPlayStream(
                     streams = allStreams,
@@ -1707,7 +1729,11 @@ internal fun PlayerRuntimeController.playNextEpisode(userInitiated: Boolean = fa
 
             fun tryBingeGroupOnly(data: List<AddonStreams>): Stream? {
                 if (currentStreamBingeGroup == null || !playerSettings.streamAutoPlayPreferBingeGroupForNextEpisode) return null
-                val orderedStreams = StreamAutoPlaySelector.orderAddonStreams(data, installedAddonOrder)
+                val orderedStreams = StreamAutoPlaySelector.orderAddonStreams(
+                    data,
+                    installedAddonOrder,
+                    streamDiagnostics.providerHealth.value.associate { it.provider to it.score }
+                )
                 val allStreams = orderedStreams.flatMap { it.streams }
                 return StreamAutoPlaySelector.selectAutoPlayStream(
                     streams = allStreams,

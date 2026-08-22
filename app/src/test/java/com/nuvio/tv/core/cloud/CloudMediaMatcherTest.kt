@@ -44,6 +44,30 @@ class CloudMediaMatcherTest {
         assertTrue(matches.isEmpty())
     }
 
+    @Test
+    fun `short movie title does not match inside another word`() {
+        val matches = CloudMediaMatcher.findMatches(
+            listOf(item("Little Women 2019", "Little.Women.2019.mkv")),
+            "It",
+            2017,
+            null,
+            null
+        )
+        assertTrue(matches.isEmpty())
+    }
+
+    @Test
+    fun `rejects unsafe episode download`() {
+        val matches = CloudMediaMatcher.findMatches(
+            listOf(item("Example Show", "Example.Show.S01E02.Downloader.dmg")),
+            "Example Show",
+            2024,
+            1,
+            2
+        )
+        assertTrue(matches.isEmpty())
+    }
+
     private fun item(name: String, vararg files: String) = CloudLibraryItem(
         providerId = "realdebrid",
         providerName = "Real-Debrid",

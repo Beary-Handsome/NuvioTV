@@ -1231,6 +1231,13 @@ class StreamScreenViewModel @Inject constructor(
 
     private suspend fun resolveSingleStream(stream: Stream): StreamResolveOutcome {
         if (!directDebridResolver.shouldResolveToPlayableStream(stream)) {
+            val directUrl = stream.getStreamUrl()
+            if (!directUrl.isNullOrBlank() && !stream.isExternal()) {
+                val headers = stream.behaviorHints?.proxyHeaders?.request.orEmpty()
+                if (!streamUrlFreshnessValidator.validate(directUrl, headers).playable) {
+                    return StreamResolveOutcome.Recoverable(StreamDebridCacheState.UNKNOWN)
+                }
+            }
             Log.d(TAG, "resolveStreamForPlayback: no debrid resolve needed, using direct URL")
             return StreamResolveOutcome.Resolved(getStreamForPlayback(stream))
         }

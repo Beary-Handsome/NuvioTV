@@ -20,7 +20,9 @@ import com.nuvio.tv.ui.components.SourceChipItem
 import com.nuvio.tv.ui.components.SourceChipStatus
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
@@ -211,6 +213,36 @@ internal fun PlayerRuntimeController.loadSourceStreams(forceRefresh: Boolean) {
         val installedAddonOrder = installedAddons.map { it.displayName }
         val installedAddonNames = installedAddonOrder.toSet()
         var debridPreparationLaunched = false
+        var supplementalStreams: List<Stream> = emptyList()
+        val mediaTitle = _uiState.value.contentName?.takeIf { it.isNotBlank() } ?: _uiState.value.title
+        val mediaYear = _uiState.value.releaseYear?.take(4)?.toIntOrNull()
+
+        val supplementalLoad = launch {
+            val streams = coroutineScope {
+                val cloud = async {
+                    cloudLibraryRepository.findMatchingStreams(mediaTitle, mediaYear, seasonArg, episodeArg)
+                }
+                val easyNews = async {
+                    directDebridResolver.searchEasyNewsStreams(mediaTitle, seasonArg, episodeArg, mediaYear)
+                }
+                (cloud.await() + easyNews.await()).distinctBy { it.stableKey() }
+            }
+            supplementalStreams = streams
+            if (streams.isNotEmpty()) {
+                _uiState.update { state ->
+                    val merged = mergeSourceStreams(state.sourceAllStreams, streams)
+                    val addons = (state.sourceAvailableAddons + streams.map { it.addonName }).distinct()
+                    val filtered = state.sourceSelectedAddonFilter
+                        ?.let { selected -> merged.filter { it.addonName == selected } }
+                        ?: merged
+                    state.copy(
+                        sourceAllStreams = merged,
+                        sourceFilteredStreams = filtered,
+                        sourceAvailableAddons = addons
+                    )
+                }
+            }
+        }
 
         // On resume, skip chip reset — keep existing chip statuses
         if (!isResume) {
@@ -231,8 +263,8 @@ internal fun PlayerRuntimeController.loadSourceStreams(forceRefresh: Boolean) {
                         installedAddonOrder,
                         streamDiagnostics.providerHealth.value.associate { it.provider to it.score }
                     )
-                    val allStreams = addonStreams.flatMap { it.streams }
-                    val availableAddons = addonStreams.map { it.addonName }
+                    val allStreams = mergeSourceStreams(addonStreams.flatMap { it.streams }, supplementalStreams)
+                    val availableAddons = (addonStreams.map { it.addonName } + supplementalStreams.map { it.addonName }).distinct()
                     _uiState.update {
                         // On resume, merge fresh results with any previously cached streams
                         val mergedAllStreams = if (isResume && it.sourceAllStreams.isNotEmpty()) {
@@ -302,6 +334,7 @@ internal fun PlayerRuntimeController.loadSourceStreams(forceRefresh: Boolean) {
                 }
             }
         }
+        supplementalLoad.join()
         sourceStreamsFetchCompleted = true
         markRemainingSourceChipsAsError()
     }
@@ -311,7 +344,7 @@ internal fun PlayerRuntimeController.loadSourceStreams(forceRefresh: Boolean) {
  * Merge fresh stream results with previously cached streams.
  * Newer entries for the same stream (matched by addon + url/infoHash) replace older ones.
  */
-private fun mergeSourceStreams(cached: List<Stream>, fresh: List<Stream>): List<Stream> {
+internal fun mergeSourceStreams(cached: List<Stream>, fresh: List<Stream>): List<Stream> {
     val merged = LinkedHashMap<String, Stream>()
     cached.forEach { stream -> merged[stream.mergeKey()] = stream }
     fresh.forEach { stream -> merged[stream.mergeKey()] = stream }
@@ -837,7 +870,7 @@ internal fun PlayerRuntimeController.tryNextStreamAfterPlaybackFailure(
             detail = detailedError.take(200)
         )
     )
-    failedSource?.let { failedStreamKeys += it.stableKey() }
+    val failedSourceKey = failedSource?.stableKey()
     streamCacheKey?.let { key ->
         scope.launch(kotlinx.coroutines.NonCancellable) { streamLinkCacheDataStore.remove(key) }
     }
@@ -845,6 +878,14 @@ internal fun PlayerRuntimeController.tryNextStreamAfterPlaybackFailure(
     playbackStreamFailoverInProgress = true
     scope.launch {
         try {
+            val canReresolveFailedSource = failedSource?.let {
+                it.isDirectDebrid() || it.needsLocalDebridResolve()
+            } == true
+            if (canReresolveFailedSource) {
+                directDebridResolver.invalidateAll()
+            } else {
+                failedSourceKey?.let(failedStreamKeys::add)
+            }
             val cached = _uiState.value.sourceAllStreams
             val fetched = if (cached.isEmpty()) fetchPlaybackFailoverStreams() else emptyList()
             val candidates = (cached + fetched).distinctBy { it.stableKey() }

@@ -234,7 +234,14 @@ class DirectDebridResolver @Inject constructor(
             DebridProviders.REAL_DEBRID_ID -> realDebridResolver.resolve(stream, season, episode)
             DebridProviders.ALLDEBRID_ID -> {
                 val settings = dataStore.settings.first()
-                resolveViaAllDebrid(settings.allDebridApiKey, stream.infoHash, stream.fileIdx, stream.behaviorHints?.filename)
+                resolveViaAllDebrid(
+                    settings.allDebridApiKey,
+                    stream.infoHash,
+                    stream.fileIdx,
+                    stream.behaviorHints?.filename,
+                    season,
+                    episode
+                )
             }
             DebridProviders.EASYNEWS_ID -> DirectDebridResolveResult.Error
             else -> DirectDebridResolveResult.Error
@@ -356,17 +363,27 @@ class DirectDebridResolver @Inject constructor(
             DebridProviders.PREMIUMIZE_ID -> premiumizeResolver.resolve(resolveStream, season, episode)
             DebridProviders.REAL_DEBRID_ID -> realDebridResolver.resolve(resolveStream, season, episode)
             DebridProviders.ALLDEBRID_ID -> resolveViaAllDebrid(
-                account.apiKey, resolveStream.infoHash, resolveStream.fileIdx, resolveStream.behaviorHints?.filename
+                account.apiKey,
+                resolveStream.infoHash,
+                resolveStream.fileIdx,
+                resolveStream.behaviorHints?.filename,
+                season,
+                episode
             )
             else -> DirectDebridResolveResult.Error
         }
     }
 
     private suspend fun resolveViaAllDebrid(
-        apiKey: String, infoHash: String?, fileIdx: Int?, filename: String?
+        apiKey: String,
+        infoHash: String?,
+        fileIdx: Int?,
+        filename: String?,
+        season: Int?,
+        episode: Int?
     ): DirectDebridResolveResult {
         if (apiKey.isBlank()) return DirectDebridResolveResult.MissingApiKey
-        val url = allDebridResolver.resolve(apiKey, infoHash ?: "", fileIdx)
+        val url = allDebridResolver.resolve(apiKey, infoHash ?: "", fileIdx, season, episode)
         return if (url != null) DirectDebridResolveResult.Success(
             url = url, filename = filename, videoSize = null
         ) else DirectDebridResolveResult.Stale

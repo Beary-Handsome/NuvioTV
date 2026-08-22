@@ -48,34 +48,30 @@ class CloudLibraryRepository @Inject constructor(
         val credentials = DebridProviders.configuredServices(settings)
             .filter { credential -> credential.provider.supports(DebridProviderCapability.CloudLibrary) }
 
-        val providerStates = credentials.map { credential ->
-            val api = providerApis.firstOrNull { it.provider.id == credential.provider.id }
-            if (api == null) {
-                return@map CloudLibraryProviderState(
-                    provider = credential.provider,
-                    errorMessage = context.getString(
-                        R.string.cloud_library_error_provider_unavailable,
-                        credential.provider.displayName
-                    )
-                )
-            }
+        val providerStates = coroutineScope {
+            credentials.map { credential ->
+                async {
+                    val api = providerApis.firstOrNull { it.provider.id == credential.provider.id }
+                        ?: return@async CloudLibraryProviderState(
+                            provider = credential.provider,
+                            errorMessage = context.getString(
+                                R.string.cloud_library_error_provider_unavailable,
+                                credential.provider.displayName
+                            )
+                        )
 
-            api.listItems(credential.apiKey)
-                .fold(
-                    onSuccess = { items ->
-                        CloudLibraryProviderState(
-                            provider = credential.provider,
-                            items = items
-                        )
-                    },
-                    onFailure = { error ->
-                        CloudLibraryProviderState(
-                            provider = credential.provider,
-                            errorMessage = error.message,
-                            items = previousByProvider[credential.provider.id]?.items.orEmpty()
-                        )
-                    }
-                )
+                    api.listItems(credential.apiKey).fold(
+                        onSuccess = { items -> CloudLibraryProviderState(credential.provider, items = items) },
+                        onFailure = { error ->
+                            CloudLibraryProviderState(
+                                provider = credential.provider,
+                                errorMessage = error.message,
+                                items = previousByProvider[credential.provider.id]?.items.orEmpty()
+                            )
+                        }
+                    )
+                }
+            }.awaitAll()
         }
 
         return CloudLibraryUiState(

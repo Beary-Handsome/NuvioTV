@@ -36,7 +36,13 @@ class AllDebridDirectDebridResolver @Inject constructor(
      * @param fileIdx Optional file index within the torrent (for multi-file packs)
      * @return Streamable HTTPS URL, or null on failure
      */
-    suspend fun resolve(apiKey: String, infoHash: String, fileIdx: Int? = null): String? {
+    suspend fun resolve(
+        apiKey: String,
+        infoHash: String,
+        fileIdx: Int? = null,
+        season: Int? = null,
+        episode: Int? = null
+    ): String? {
         try {
             val magnet = "magnet:?xt=urn:btih:$infoHash"
 
@@ -100,7 +106,9 @@ class AllDebridDirectDebridResolver @Inject constructor(
                             val name = link.filename?.lowercase() ?: ""
                             val isVideo = name.endsWith(".mkv") || name.endsWith(".mp4") || name.endsWith(".avi") ||
                                 name.endsWith(".m4v") || name.endsWith(".ts") || name.endsWith(".wmv")
-                            if (isVideo || name.isBlank()) l to (link.size ?: 0L) else null
+                            if (isVideo || name.isBlank()) {
+                                DebridLinkCandidate(l, link.size ?: 0L, link.filename.orEmpty())
+                            } else null
                         }
                     }
 
@@ -112,20 +120,26 @@ class AllDebridDirectDebridResolver @Inject constructor(
                     // Pick file: try matching by filename from the full files list first,
                     // then fall back to largest video file. Using fileIdx directly is unreliable
                     // because allLinks is filtered to video-only files.
-                    val targetLink = if (fileIdx != null) {
+                    val indexedLink = if (fileIdx != null) {
                         // Try to find the original filename at fileIdx from the unfiltered tree
                         val originalName = findFileNameByIndex(magnetInfo.files ?: emptyList(), fileIdx)
                         if (originalName != null) {
-                            allLinks.firstOrNull { pair ->
-                                pair.first.lowercase().contains(originalName.lowercase())
-                            } ?: allLinks.maxByOrNull { it.second }
-                        } else {
-                            // fileIdx doesn't resolve to a name; pick largest
-                            allLinks.maxByOrNull { it.second }
-                        }
-                    } else {
-                        allLinks.maxByOrNull { it.second }  // largest file
+                            allLinks.firstOrNull { candidate ->
+                                candidate.name.equals(originalName, ignoreCase = true) ||
+                                    candidate.name.normalizedDebridFileName()
+                                        .contains(originalName.normalizedDebridFileName())
+                            }
+                        } else null
+                    } else null
+                    val episodePatterns = buildDebridEpisodePatterns(season, episode)
+                    val episodeLink = episodePatterns.takeIf { it.isNotEmpty() }?.let { patterns ->
+                        allLinks.filter { candidate ->
+                            val normalized = candidate.name.normalizedDebridFileName().replace(" ", "")
+                            patterns.any { pattern -> normalized.contains(pattern) }
+                        }.maxByOrNull { it.size }
                     }
+                    val targetLink = indexedLink ?: episodeLink
+                        ?: if (episodePatterns.isEmpty()) allLinks.maxByOrNull { it.size } else null
 
                     if (targetLink == null) {
                         Log.w(TAG, "No suitable file found")
@@ -135,7 +149,7 @@ class AllDebridDirectDebridResolver @Inject constructor(
                     // 4. Unlock the link to get the streamable URL
                     val unlockResponse = allDebridApi.unlockLink(
                         apiKey = apiKey,
-                        link = targetLink.first
+                        link = targetLink.url
                     )
                     if (!unlockResponse.isSuccessful) {
                         Log.w(TAG, "Unlock failed: ${unlockResponse.code()}")
@@ -217,8 +231,8 @@ class AllDebridDirectDebridResolver @Inject constructor(
      * AD nests files as: files[].e[].{n, s, l} where e[] can also contain
      * nested directories.
      */
-    private fun flattenFileLinks(files: List<AllDebridFileDto>): List<Pair<String, Long>> {
-        val result = mutableListOf<Pair<String, Long>>()
+    private fun flattenFileLinks(files: List<AllDebridFileDto>): List<DebridLinkCandidate> {
+        val result = mutableListOf<DebridLinkCandidate>()
         for (f in files) {
             if (!f.link.isNullOrBlank()) {
                 val isVideo = f.name?.lowercase()?.let { n ->
@@ -226,7 +240,7 @@ class AllDebridDirectDebridResolver @Inject constructor(
                         n.endsWith(".m4v") || n.endsWith(".ts") || n.endsWith(".wmv")
                 } == true
                 if (isVideo) {
-                    result.add(f.link to (f.size ?: 0))
+                    result.add(DebridLinkCandidate(f.link, f.size ?: 0, f.name.orEmpty()))
                 }
             }
             // Recurse into subdirectories
@@ -234,4 +248,6 @@ class AllDebridDirectDebridResolver @Inject constructor(
         }
         return result
     }
+
+    private data class DebridLinkCandidate(val url: String, val size: Long, val name: String)
 }

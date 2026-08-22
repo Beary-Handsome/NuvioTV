@@ -19,7 +19,8 @@ object CloudMediaMatcher {
         return items.flatMap { item ->
             item.playableFiles.mapNotNull { file ->
                 val searchable = "${item.name} ${file.name}"
-                if (!searchable.normalizedMediaTitle().contains(expectedTitle)) return@mapNotNull null
+                if (!searchable.normalizedMediaTitle().containsTokenSequence(expectedTitle)) return@mapNotNull null
+                if (UNSAFE_FILE_REGEX.containsMatchIn(file.name)) return@mapNotNull null
                 if (isEpisode) {
                     if (!searchable.hasSeasonEpisode(season!!, episode!!)) return@mapNotNull null
                 } else if (year != null) {
@@ -43,9 +44,17 @@ object CloudMediaMatcher {
             .replace(Regex("[^a-z0-9]+"), " ")
             .trim()
 
+    private fun String.containsTokenSequence(expected: String): Boolean {
+        val actualTokens = split(' ').filter(String::isNotBlank)
+        val expectedTokens = expected.split(' ').filter(String::isNotBlank)
+        if (expectedTokens.isEmpty() || expectedTokens.size > actualTokens.size) return false
+        return actualTokens.windowed(expectedTokens.size).any { it == expectedTokens }
+    }
+
     private val YEAR_REGEX = Regex("\\b(?:19|20)\\d{2}\\b")
     private val EPISODE_REGEX = Regex("(?i)\\bs\\d{1,3}[ ._-]*e\\d{1,4}\\b|\\b\\d{1,3}[ ._-]*x[ ._-]*\\d{1,4}\\b")
     private val QUALITY_REGEX = Regex(
         "(?i)\\b(?:2160p|1080p|720p|480p|web[ ._-]*dl|webrip|bluray|brrip|remux|x26[45]|h26[45]|hevc|av1)\\b"
     )
+    private val UNSAFE_FILE_REGEX = Regex("(?i)\\.(?:dmg|exe|msi|apk|bat|cmd|scr|zip|rar|7z)$")
 }

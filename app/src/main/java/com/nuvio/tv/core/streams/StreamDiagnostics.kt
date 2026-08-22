@@ -123,6 +123,8 @@ class StreamDiagnostics @Inject constructor(
         const val MAX_EVENTS = 200
         const val HEALTH_EVENT_WINDOW = 30
         const val NEUTRAL_SCORE = 50
-        val SUCCESS_OUTCOMES = setOf("success", "cached", "valid", "resolved", "inline_fallback", "playback_success")
+        val SUCCESS_OUTCOMES = setOf(
+            "success", "cached", "valid", "playable", "resolved", "inline_fallback", "playback_success"
+        )
     }
 }

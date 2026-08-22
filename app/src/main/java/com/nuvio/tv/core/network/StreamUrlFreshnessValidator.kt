@@ -31,15 +31,19 @@ class StreamUrlFreshnessValidator @Inject constructor(
         }
         val started = System.currentTimeMillis()
         val host = runCatching { URI(url).host }.getOrNull().orEmpty().ifBlank { "stream" }
-        val request = Request.Builder().url(url).get().header("Range", "bytes=0-0").apply {
+        val requestBuilder = Request.Builder().url(url).apply {
             headers.forEach { (name, value) -> header(name, value) }
-        }.build()
+        }
+        val request = requestBuilder.get().header("Range", "bytes=0-0").build()
         val validation = runCatching {
             client.newCall(request).execute().use { response ->
-                StreamUrlValidation(
-                    playable = response.code in 200..299 || response.code == 416,
-                    statusCode = response.code
-                )
+                if (response.code in RANGE_UNSUPPORTED_CODES) {
+                    client.newCall(requestBuilder.head().removeHeader("Range").build()).execute().use { head ->
+                        StreamUrlValidation(head.code in 200..399, head.code)
+                    }
+                } else {
+                    StreamUrlValidation(response.code in 200..299 || response.code == 416, response.code)
+                }
             }
         }.getOrElse { StreamUrlValidation(playable = false) }
         diagnostics.record(
@@ -52,5 +56,9 @@ class StreamUrlFreshnessValidator @Inject constructor(
             )
         )
         validation
+    }
+
+    private companion object {
+        val RANGE_UNSUPPORTED_CODES = setOf(400, 405, 501)
     }
 }

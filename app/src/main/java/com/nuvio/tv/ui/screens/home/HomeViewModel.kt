@@ -80,7 +80,9 @@ class HomeViewModel @Inject constructor(
     internal val watchedSeriesStateHolder: com.nuvio.tv.data.local.WatchedSeriesStateHolder,
     internal val cwEnrichmentCache: ContinueWatchingEnrichmentCache,
     internal val profileManager: com.nuvio.tv.core.profile.ProfileManager,
-    internal val tvRecommendationManager: TvRecommendationManager
+    internal val tvRecommendationManager: TvRecommendationManager,
+    internal val traktRecommendationsService: com.nuvio.tv.core.trakt.TraktRecommendationsService,
+    internal val traktAuthDataStore: com.nuvio.tv.data.local.TraktAuthDataStore
 ) : ViewModel() {
     companion object {
         internal const val TAG = "HomeViewModel"
@@ -325,6 +327,7 @@ class HomeViewModel @Inject constructor(
             observeProgressSourceChanges()
             observeCollections()
             observeInstalledAddons()
+            observeTraktRecommendations()
 
             // Clear CW state when profile changes so items don't leak between profiles.
             var previousProfileId = profileManager.activeProfileId.value
@@ -708,6 +711,31 @@ class HomeViewModel @Inject constructor(
     )
 
     private fun observeCollections() = observeCollectionsPipeline()
+
+    internal var traktRecommendationRows: List<CatalogRow> = emptyList()
+
+    private fun observeTraktRecommendations() {
+        viewModelScope.launch {
+            traktAuthDataStore.isAuthenticated
+                .distinctUntilChanged()
+                .collectLatest { authenticated ->
+                    traktRecommendationRows = if (authenticated) {
+                        val language = currentTmdbSettings.language
+                        listOfNotNull(
+                            runCatching {
+                                traktRecommendationsService.recommendedMoviesRow(language)
+                            }.getOrNull(),
+                            runCatching {
+                                traktRecommendationsService.recommendedShowsRow(language)
+                            }.getOrNull()
+                        )
+                    } else {
+                        emptyList()
+                    }
+                    updateCatalogRowsPipeline()
+                }
+        }
+    }
 
     private fun observeInstalledAddons() = observeInstalledAddonsPipeline()
 

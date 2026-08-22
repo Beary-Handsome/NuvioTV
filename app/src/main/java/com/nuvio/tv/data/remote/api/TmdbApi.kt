@@ -607,7 +607,8 @@ data class TmdbDiscoverResult(
     @Json(name = "first_air_date") val firstAirDate: String? = null,
     @Json(name = "vote_average") val voteAverage: Double? = null,
     @Json(name = "vote_count") val voteCount: Int? = null,
-    @Json(name = "popularity") val popularity: Double? = null
+    @Json(name = "popularity") val popularity: Double? = null,
+    @Json(name = "genre_ids") val genreIds: List<Int>? = null
 )
 
 @JsonClass(generateAdapter = true)
@@ -625,7 +626,8 @@ data class TmdbRecommendationResult(
     @Json(name = "release_date") val releaseDate: String? = null,
     @Json(name = "first_air_date") val firstAirDate: String? = null,
     @Json(name = "vote_average") val voteAverage: Double? = null,
-    @Json(name = "vote_count") val voteCount: Int? = null
+    @Json(name = "vote_count") val voteCount: Int? = null,
+    @Json(name = "genre_ids") val genreIds: List<Int>? = null
 )
 
 // ── Person / Cast Detail DTOs ──
@@ -703,7 +705,8 @@ data class TmdbCollectionPart(
     @Json(name = "poster_path") val posterPath: String? = null,
     @Json(name = "backdrop_path") val backdropPath: String? = null,
     @Json(name = "vote_average") val voteAverage: Double? = null,
-    @Json(name = "vote_count") val voteCount: Int? = null
+    @Json(name = "vote_count") val voteCount: Int? = null,
+    @Json(name = "genre_ids") val genreIds: List<Int>? = null
 )
 
 @JsonClass(generateAdapter = true)

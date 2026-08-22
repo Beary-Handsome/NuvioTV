@@ -76,7 +76,11 @@ class LocalDebridAvailabilityServiceTest {
                 torboxApiKey = "tb_token"
             )
         )
-        return LocalDebridAvailabilityService(dataStore, localDebridService)
+        return LocalDebridAvailabilityService(
+            dataStore,
+            localDebridService,
+            com.nuvio.tv.core.streams.StreamDiagnostics()
+        )
     }
 
     private fun group(streams: List<Stream>): AddonStreams =

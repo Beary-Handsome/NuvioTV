@@ -5,6 +5,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.R
 import com.nuvio.tv.core.auth.AuthManager
+import com.nuvio.tv.core.streams.StreamDiagnostics
+import com.nuvio.tv.core.streams.StreamProviderDiagnostic
 import com.nuvio.tv.data.local.DebugSettingsDataStore
 import com.nuvio.tv.data.local.LayoutPreferenceDataStore
 import com.nuvio.tv.data.local.LibraryPreferences
@@ -33,6 +35,7 @@ class DebugSettingsViewModel @Inject constructor(
     private val themeDataStore: ThemeDataStore,
     private val authManager: AuthManager,
     private val libraryPreferences: LibraryPreferences,
+    private val streamDiagnostics: StreamDiagnostics,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -64,6 +67,11 @@ class DebugSettingsViewModel @Inject constructor(
         viewModelScope.launch {
             playerSettingsDataStore.playerSettings.collectLatest { settings ->
                 _uiState.update { it.copy(bufferLogsEnabled = settings.enableBufferLogs) }
+            }
+        }
+        viewModelScope.launch {
+            streamDiagnostics.events.collectLatest { events ->
+                _uiState.update { it.copy(streamDiagnostics = events) }
             }
         }
     }
@@ -183,7 +191,8 @@ data class DebugSettingsUiState(
     val generateLibraryLoading: Boolean = false,
     val generateLibraryResult: String? = null,
     val signInLoading: Boolean = false,
-    val signInResult: String? = null
+    val signInResult: String? = null,
+    val streamDiagnostics: List<StreamProviderDiagnostic> = emptyList()
 )
 
 sealed class DebugSettingsEvent {

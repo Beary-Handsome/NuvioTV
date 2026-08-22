@@ -7,6 +7,9 @@ import com.nuvio.tv.domain.model.DebridSettings
 import com.nuvio.tv.domain.model.Stream
 import com.nuvio.tv.domain.model.StreamDebridCacheState
 import com.nuvio.tv.domain.model.StreamDebridCacheStatus
+import com.nuvio.tv.core.streams.StreamDiagnosticStage
+import com.nuvio.tv.core.streams.StreamDiagnostics
+import com.nuvio.tv.core.streams.StreamProviderDiagnostic
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
@@ -16,7 +19,8 @@ import javax.inject.Singleton
 @Singleton
 class LocalDebridAvailabilityService @Inject constructor(
     private val dataStore: DebridSettingsDataStore,
-    private val localDebridService: LocalDebridService
+    private val localDebridService: LocalDebridService,
+    private val diagnostics: StreamDiagnostics
 ) {
     suspend fun markChecking(groups: List<AddonStreams>): List<AddonStreams> {
         val accounts = cacheCheckAccounts()
@@ -57,7 +61,22 @@ class LocalDebridAvailabilityService @Inject constructor(
         val allResults = coroutineScope {
             accounts.map { account ->
                 async {
-                    account to localDebridService.checkCached(account = account, hashes = hashes)
+                    val startedAt = System.currentTimeMillis()
+                    val result = localDebridService.checkCached(account = account, hashes = hashes)
+                    diagnostics.record(
+                        StreamProviderDiagnostic(
+                            provider = account.provider.displayName,
+                            stage = StreamDiagnosticStage.CACHE_CHECK,
+                            elapsedMs = System.currentTimeMillis() - startedAt,
+                            resultCount = result?.size ?: 0,
+                            outcome = when {
+                                result == null -> "inconclusive"
+                                result.isEmpty() -> "not_cached"
+                                else -> "cached"
+                            }
+                        )
+                    )
+                    account to result
                 }
             }.map { it.await() }
         }

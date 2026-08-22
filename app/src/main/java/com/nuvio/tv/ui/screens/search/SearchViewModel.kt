@@ -804,13 +804,8 @@ class SearchViewModel @Inject constructor(
                         .firstOrNull { it.name.equals("genre", ignoreCase = true) }
                         ?.options
                         .orEmpty()
-                    val genres = structuredGenres.ifEmpty {
-                        if (catalog.extraSupported.any { it.equals("genre", ignoreCase = true) }) {
-                            defaultGenresForType(catalog.apiType)
-                        } else {
-                            emptyList()
-                        }
-                    }
+                    val supportsGenreQuery = catalog.supportsExtra("genre")
+                    val genres = structuredGenres.ifEmpty { defaultGenresForType(catalog.apiType) }
                     DiscoverCatalog(
                         key = "${addon.id}_${catalog.apiType}_${catalog.id}",
                         addonId = addon.id,
@@ -820,6 +815,7 @@ class SearchViewModel @Inject constructor(
                         catalogName = catalog.name,
                         type = catalog.apiType,
                         genres = genres,
+                        supportsGenreQuery = supportsGenreQuery,
                         supportsSkip = catalog.supportsExtra("skip"),
                         skipStep = catalog.skipStep()
                     )
@@ -961,7 +957,9 @@ class SearchViewModel @Inject constructor(
             val skip = if (currentPage <= 1) 0 else (currentPage - 1) * selectedCatalog.skipStep
             val visibleCountBeforeRequest = state.discoverResults.size
             val extraArgs = buildMap<String, String> {
-                state.selectedDiscoverGenre?.takeIf { it.isNotBlank() }?.let { put("genre", it) }
+                if (selectedCatalog.supportsGenreQuery) {
+                    state.selectedDiscoverGenre?.takeIf { it.isNotBlank() }?.let { put("genre", it) }
+                }
             }
 
             catalogRepository.getCatalog(
@@ -993,11 +991,18 @@ class SearchViewModel @Inject constructor(
                         }
                         val merged = if (reset) incoming else (existing + incoming)
                         val rawDeduped = merged.distinctBy { "${it.apiType}:${it.id}" }
-                        val deduped = if (hideUnreleasedContent) {
-                            val today = LocalDate.now()
-                            rawDeduped.filterNot { it.isUnreleased(today) }
+                        val genreFiltered = if (!selectedCatalog.supportsGenreQuery && state.selectedDiscoverGenre != null) {
+                            rawDeduped.filter { item ->
+                                item.genres.any { it.equals(state.selectedDiscoverGenre, ignoreCase = true) }
+                            }
                         } else {
                             rawDeduped
+                        }
+                        val deduped = if (hideUnreleasedContent) {
+                            val today = LocalDate.now()
+                            genreFiltered.filterNot { it.isUnreleased(today) }
+                        } else {
+                            genreFiltered
                         }
                         val shouldRevealBatch = !reset && revealBatchAfterNextDiscoverFetch
                         val visibleLimit = if (reset) {

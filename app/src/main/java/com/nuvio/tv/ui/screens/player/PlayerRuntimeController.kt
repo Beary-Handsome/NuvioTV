@@ -479,6 +479,7 @@ class PlayerRuntimeController(
     // record its stable identity when playback fails and to invalidate its
     // resolved debrid link.
     internal var currentSourceStream: com.nuvio.tv.domain.model.Stream? = null
+    internal var playbackStreamFailoverInProgress: Boolean = false
     internal var pendingBingeGroupSave: Pair<String, String>? = null
     internal var startupRetryCount: Int = 0
     internal var parsingErrorProbeAttempted: Boolean = false
@@ -566,9 +567,15 @@ class PlayerRuntimeController(
     internal var episodeStreamsCacheRequestKey: String? = null
     internal val streamCacheKey: String?
         get() {
-            val type = contentType?.lowercase()
-            val vid = currentVideoId
-            return if (type.isNullOrBlank() || vid.isNullOrBlank()) null else "$type|$vid"
+            val type = contentType ?: return null
+            val vid = currentVideoId ?: return null
+            return com.nuvio.tv.domain.model.CanonicalMediaIdentity.create(
+                type = type,
+                contentId = contentId ?: vid,
+                videoId = vid,
+                season = currentSeason,
+                episode = currentEpisode
+            ).videoKey
         }
 
     init {

@@ -60,6 +60,7 @@ data class DiscoverCatalog(
     val catalogName: String,
     val type: String,
     val genres: List<String>,
+    val supportsGenreQuery: Boolean = false,
     val supportsSkip: Boolean,
     val skipStep: Int
 )

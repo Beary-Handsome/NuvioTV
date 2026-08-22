@@ -12,6 +12,7 @@ import com.nuvio.tv.core.debrid.DirectDebridResolver
 import com.nuvio.tv.core.debrid.DirectDebridStreamPreparer
 import com.nuvio.tv.core.plugin.PluginManager
 import com.nuvio.tv.core.network.NetworkResult
+import com.nuvio.tv.core.network.StreamUrlFreshnessValidator
 import com.nuvio.tv.core.torrent.TorrentSettings
 import com.nuvio.tv.core.torrent.TorrentService
 import com.nuvio.tv.core.torrent.TorrentState
@@ -35,6 +36,7 @@ import com.nuvio.tv.domain.model.AddonStreams
 import com.nuvio.tv.domain.model.Meta
 import com.nuvio.tv.domain.model.Stream
 import com.nuvio.tv.domain.model.Video
+import com.nuvio.tv.domain.model.CanonicalMediaIdentity
 import com.nuvio.tv.domain.model.WatchProgress
 import com.nuvio.tv.domain.model.StreamDebridCacheState
 import com.nuvio.tv.domain.model.enabledAddons
@@ -75,6 +77,7 @@ class StreamScreenViewModel @Inject constructor(
     private val metaRepository: MetaRepository,
     private val playerSettingsDataStore: PlayerSettingsDataStore,
     private val streamLinkCacheDataStore: StreamLinkCacheDataStore,
+    private val streamUrlFreshnessValidator: StreamUrlFreshnessValidator,
     private val streamBadgePresentation: StreamBadgePresentation,
     streamBadgeSettingsDataStore: StreamBadgeSettingsDataStore,
     private val bingeGroupCacheDataStore: BingeGroupCacheDataStore,
@@ -130,7 +133,14 @@ class StreamScreenViewModel @Inject constructor(
     private val manualSelection: Boolean = savedStateHandle.get<String>("manualSelection")
         ?.toBooleanStrictOrNull()
         ?: false
-    private val streamCacheKey: String = "${contentType.lowercase()}|$videoId"
+    private val mediaIdentity = CanonicalMediaIdentity.create(
+        type = contentType,
+        contentId = contentId,
+        videoId = videoId,
+        season = season,
+        episode = episode
+    )
+    private val streamCacheKey: String = mediaIdentity.videoKey
 
     private val _uiState = MutableStateFlow(
         StreamScreenUiState(
@@ -400,25 +410,33 @@ class StreamScreenViewModel @Inject constructor(
                     contentKey = streamCacheKey,
                     maxAgeMs = playerSettings.streamReuseLastLinkCacheHours * 60L * 60L * 1000L
                 )
-                if (cached != null) {
+                val validatedCached = cached?.takeIf { candidate ->
+                    candidate.url.isBlank() || streamUrlFreshnessValidator
+                        .validate(candidate.url, candidate.headers)
+                        .playable
+                }
+                if (cached != null && validatedCached == null) {
+                    streamLinkCacheDataStore.remove(streamCacheKey)
+                }
+                if (validatedCached != null) {
                     autoPlayHandledForSession = true
                     resolvedAutoPlayTarget = true
-                    val isCachedTorrent = cached.infoHash != null && cached.url.isNullOrBlank()
+                    val isCachedTorrent = validatedCached.infoHash != null && validatedCached.url.isBlank()
                     val showOverlay = playerSettings.playerPreference == PlayerPreference.EXTERNAL
                     updateUiStateIfChanged {
                         it.copy(
                             autoPlayPlaybackInfo = StreamPlaybackInfo(
-                                url = cached.url.takeIf { u -> u.isNotBlank() },
+                                url = validatedCached.url.takeIf { u -> u.isNotBlank() },
                                 title = title,
-                                streamName = cached.streamName,
-                                year = cached.year ?: year,
+                                streamName = validatedCached.streamName,
+                                year = validatedCached.year ?: year,
                                 isExternal = false,
                                 isTorrent = isCachedTorrent,
-                                infoHash = cached.infoHash,
+                                infoHash = validatedCached.infoHash,
                                 ytId = null,
-                                headers = cached.headers,
-                                contentId = contentId ?: videoId.substringBefore(":"),
-                                contentType = contentType,
+                                headers = validatedCached.headers,
+                                contentId = mediaIdentity.contentId,
+                                contentType = mediaIdentity.type,
                                 contentName = contentName ?: title,
                                 poster = poster,
                                 backdrop = backdrop,
@@ -427,13 +445,13 @@ class StreamScreenViewModel @Inject constructor(
                                 season = season,
                                 episode = episode,
                                 episodeTitle = episodeName,
-                                bingeGroup = cached.bingeGroup,
-                                filename = cached.filename,
-                                videoHash = cached.videoHash,
-                                videoSize = cached.videoSize,
-                                fileIdx = cached.fileIdx,
-                                sources = cached.sources,
-                                contentLanguage = cached.contentLanguage ?: contentLanguage
+                                bingeGroup = validatedCached.bingeGroup,
+                                filename = validatedCached.filename,
+                                videoHash = validatedCached.videoHash,
+                                videoSize = validatedCached.videoSize,
+                                fileIdx = validatedCached.fileIdx,
+                                sources = validatedCached.sources,
+                                contentLanguage = validatedCached.contentLanguage ?: contentLanguage
                             ),
                             showDirectAutoPlayOverlay = showOverlay || it.showDirectAutoPlayOverlay,
                             isDirectAutoPlayFlow = showOverlay || it.isDirectAutoPlayFlow

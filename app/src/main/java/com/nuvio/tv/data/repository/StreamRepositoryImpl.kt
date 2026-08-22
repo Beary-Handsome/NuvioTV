@@ -11,6 +11,9 @@ import com.nuvio.tv.core.plugin.PluginManager
 import com.nuvio.tv.core.plugin.resolvePluginSeasonEpisode
 import com.nuvio.tv.core.profile.ProfileManager
 import com.nuvio.tv.core.tmdb.TmdbService
+import com.nuvio.tv.core.streams.StreamDiagnosticStage
+import com.nuvio.tv.core.streams.StreamDiagnostics
+import com.nuvio.tv.core.streams.StreamProviderDiagnostic
 import com.nuvio.tv.data.local.DebridSettingsDataStore
 import com.nuvio.tv.data.mapper.toDomain
 import com.nuvio.tv.data.remote.api.AddonApi
@@ -23,6 +26,7 @@ import com.nuvio.tv.domain.model.ProxyHeaders
 import com.nuvio.tv.domain.model.ScraperInfo
 import com.nuvio.tv.domain.model.Stream
 import com.nuvio.tv.domain.model.StreamBehaviorHints
+import com.nuvio.tv.domain.model.CanonicalMediaIdentity
 import com.nuvio.tv.domain.model.enabledAddons
 import com.nuvio.tv.domain.repository.AddonRepository
 import com.nuvio.tv.domain.repository.StreamRepository
@@ -34,6 +38,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.transformLatest
@@ -43,6 +48,7 @@ import java.security.MessageDigest
 import javax.inject.Inject
 
 private const val TAG = "StreamRepositoryImpl"
+private const val SNAPSHOT_DEBOUNCE_MS = 150L
 
 class StreamRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -53,7 +59,8 @@ class StreamRepositoryImpl @Inject constructor(
     private val debridSettingsDataStore: DebridSettingsDataStore,
     private val tmdbService: TmdbService,
     private val debridStreamPresentation: DebridStreamPresentation,
-    private val localDebridAvailabilityService: LocalDebridAvailabilityService
+    private val localDebridAvailabilityService: LocalDebridAvailabilityService,
+    private val streamDiagnostics: StreamDiagnostics
 ) : StreamRepository {
     private val streamSearchSessions = StreamSearchSessionCache()
     private val localPluginSearchPaused = MutableStateFlow(false)
@@ -83,6 +90,7 @@ class StreamRepositoryImpl @Inject constructor(
         val debridSettings: DebridSettings
     )
 
+    @OptIn(kotlinx.coroutines.FlowPreview::class)
     override fun getStreamsFromAllAddons(
         type: String,
         videoId: String,
@@ -91,12 +99,13 @@ class StreamRepositoryImpl @Inject constructor(
         forceRefresh: Boolean
     ): Flow<NetworkResult<List<AddonStreams>>> = flow {
         val sourceConfiguration = captureSourceConfiguration()
+        val identity = CanonicalMediaIdentity.create(type, null, videoId, season, episode)
         val requestKey = StreamSearchRequestKey(
             profileId = sourceConfiguration.profileId,
-            type = type.lowercase(),
-            videoId = videoId,
-            season = season,
-            episode = episode,
+            type = identity.type,
+            videoId = identity.videoId,
+            season = identity.season,
+            episode = identity.episode,
             sourceConfiguration = buildSourceConfigurationKey(
                 addons = sourceConfiguration.addons,
                 pluginsEnabled = sourceConfiguration.pluginsEnabled,
@@ -115,15 +124,17 @@ class StreamRepositoryImpl @Inject constructor(
                 forceRefresh = forceRefresh
             ) {
                 fetchStreamsFromAllSources(
-                    type = type,
-                    videoId = videoId,
-                    season = season,
-                    episode = episode,
+                    type = identity.type,
+                    videoId = identity.videoId,
+                    season = identity.season,
+                    episode = identity.episode,
                     addons = sourceConfiguration.addons,
                     debridSettings = sourceConfiguration.debridSettings,
                     hasCompatiblePlugins = sourceConfiguration.pluginsEnabled &&
                         sourceConfiguration.enabledScrapers.any { scraper -> scraper.supportsType(type) }
-                )
+                ).debounce { result ->
+                    if (result is NetworkResult.Success) SNAPSHOT_DEBOUNCE_MS else 0L
+                }
             }
         )
     }
@@ -189,11 +200,18 @@ class StreamRepositoryImpl @Inject constructor(
                 // Launch addon jobs
                 streamAddons.forEach { addon ->
                     launch {
+                        val startedAt = System.currentTimeMillis()
+                        var diagnosticOutcome = "empty"
+                        var diagnosticCount = 0
+                        var diagnosticDetail: String? = null
+                        var diagnosticStatus: Int? = null
                         try {
                             val streamsResult = getStreamsFromAddon(addon.baseUrl, type, videoId)
                             when (streamsResult) {
                                 is NetworkResult.Success -> {
                                     if (streamsResult.data.isNotEmpty()) {
+                                        diagnosticOutcome = "success"
+                                        diagnosticCount = streamsResult.data.size
                                         val namedStreams = streamsResult.data.map {
                                             it.copy(addonName = addon.displayName, addonLogo = addon.logo)
                                         }
@@ -211,6 +229,8 @@ class StreamRepositoryImpl @Inject constructor(
                                             addon, type, videoId
                                         )
                                         if (inlineStreams.isNotEmpty()) {
+                                            diagnosticOutcome = "inline_fallback"
+                                            diagnosticCount = inlineStreams.size
                                             resultChannel.send(
                                                 AddonStreams(
                                                     addonName = addon.displayName,
@@ -219,11 +239,15 @@ class StreamRepositoryImpl @Inject constructor(
                                                 )
                                             )
                                         } else {
+                                            diagnosticDetail = "No endpoint or inline streams"
                                             attemptedFailures += buildMissingStreamFailure(addon)
                                         }
                                     }
                                 }
                                 is NetworkResult.Error -> {
+                                    diagnosticOutcome = "error"
+                                    diagnosticDetail = streamsResult.message
+                                    diagnosticStatus = streamsResult.code
                                     attemptedFailures += buildAddonFailure(addon, streamsResult)
                                 }
                                 NetworkResult.Loading -> Unit
@@ -231,12 +255,25 @@ class StreamRepositoryImpl @Inject constructor(
                         } catch (e: Exception) {
                             if (e is CancellationException) throw e
                             Log.e(TAG, "Addon ${addon.name} failed: ${e.message}")
+                            diagnosticOutcome = "exception"
+                            diagnosticDetail = e.message
                             attemptedFailures += StreamAttemptFailure(
                                 addonName = addon.displayName,
                                 kind = StreamFailureKind.REQUEST_FAILED,
                                 detail = e.message ?: context.getString(com.nuvio.tv.R.string.stream_error_detail_addon_request_failed)
                             )
                         } finally {
+                            streamDiagnostics.record(
+                                StreamProviderDiagnostic(
+                                    provider = addon.displayName,
+                                    stage = StreamDiagnosticStage.SCRAPE,
+                                    elapsedMs = System.currentTimeMillis() - startedAt,
+                                    resultCount = diagnosticCount,
+                                    statusCode = diagnosticStatus,
+                                    outcome = diagnosticOutcome,
+                                    detail = diagnosticDetail
+                                )
+                            )
                             if (completedJobs.incrementAndGet() >= totalJobs) {
                                 resultChannel.close()
                             }
@@ -449,6 +486,7 @@ class StreamRepositoryImpl @Inject constructor(
         }
 
         Log.d(TAG, "Streaming plugins for $pluginSource: $pluginId, type: $mediaType")
+        val pluginSearchStartedAt = System.currentTimeMillis()
 
         try {
             val groupByRepository = pluginManager.groupStreamsByRepository.first()
@@ -465,6 +503,15 @@ class StreamRepositoryImpl @Inject constructor(
                 season = season,
                 episode = episode
             ).collect { (scraper, results) ->
+                streamDiagnostics.record(
+                    StreamProviderDiagnostic(
+                        provider = scraper.name,
+                        stage = StreamDiagnosticStage.SCRAPE,
+                        elapsedMs = System.currentTimeMillis() - pluginSearchStartedAt,
+                        resultCount = results.size,
+                        outcome = if (results.isEmpty()) "empty" else "success"
+                    )
+                )
                 if (results.isNotEmpty()) {
                     val addonName = scraper.pluginAddonName(groupByRepository, repositoriesById)
                     val addonStreams = AddonStreams(

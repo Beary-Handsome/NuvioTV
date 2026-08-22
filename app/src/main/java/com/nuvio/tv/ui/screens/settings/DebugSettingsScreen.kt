@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -162,6 +163,44 @@ fun DebugSettingsContent(
                     checked = uiState.bufferLogsEnabled,
                     onToggle = { viewModel.onEvent(DebugSettingsEvent.ToggleBufferLogs(it)) }
                 )
+            }
+
+            item(key = "debug_stream_diagnostics_header") {
+                Spacer(modifier = Modifier.height(NuvioTheme.spacing.sm))
+                Text(
+                    text = "Stream provider diagnostics",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = NuvioTheme.colors.TextTertiary,
+                    modifier = Modifier.padding(bottom = NuvioTheme.spacing.xs)
+                )
+            }
+
+            if (uiState.streamDiagnostics.isEmpty()) {
+                item(key = "debug_stream_diagnostics_empty") {
+                    DebugActionCard(
+                        title = "No stream diagnostics yet",
+                        subtitle = "Open a movie or episode to run a scrape.",
+                        onClick = {}
+                    )
+                }
+            } else {
+                items(
+                    count = uiState.streamDiagnostics.take(20).size,
+                    key = { index -> "debug_stream_diag_${uiState.streamDiagnostics[index].timestampMs}_$index" }
+                ) { index ->
+                    val event = uiState.streamDiagnostics[index]
+                    DebugActionCard(
+                        title = "${event.provider} - ${event.stage.name.lowercase()}",
+                        subtitle = buildString {
+                            append(event.outcome)
+                            append(" | ").append(event.elapsedMs).append(" ms")
+                            append(" | ").append(event.resultCount).append(" results")
+                            event.statusCode?.let { append(" | HTTP ").append(it) }
+                            event.detail?.takeIf { it.isNotBlank() }?.let { append(" | ").append(it) }
+                        },
+                        onClick = {}
+                    )
+                }
             }
 
             // ── Library Testing ──

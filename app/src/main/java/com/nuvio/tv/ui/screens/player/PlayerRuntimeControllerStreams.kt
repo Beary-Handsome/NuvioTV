@@ -31,6 +31,8 @@ import kotlinx.coroutines.withTimeoutOrNull
 /** Hard ceiling for next-episode stream search to prevent hanging forever. */
 private const val NEXT_EPISODE_HARD_TIMEOUT_MS = 120_000L
 private const val CLOUD_LIBRARY_AUTO_NEXT_TIMEOUT_MS = 65_000L
+private const val PLAYBACK_STREAM_FAILOVER_FETCH_TIMEOUT_MS = 15_000L
+private const val MAX_PLAYBACK_STREAM_FAILOVER_ATTEMPTS = 8
 
 /**
  * Schedules incremental badge matching for source streams in the background.
@@ -659,6 +661,7 @@ private fun PlayerRuntimeController.openExternalStreamInBrowser(
 internal fun PlayerRuntimeController.switchToSourceStream(
     stream: Stream
 ) {
+    currentSourceStream = stream
     sourceStreamsScope?.cancel()
     sourceStreamsScope = null
     sourceStreamsJob = null
@@ -806,6 +809,83 @@ internal fun PlayerRuntimeController.switchToSourceStream(
     }
 
     loadSavedProgressFor(currentSeason, currentEpisode)
+}
+
+/**
+ * Advances autoplay to another distinct source after the player exhausts its
+ * same-stream recovery options. Returns immediately after scheduling recovery.
+ */
+internal fun PlayerRuntimeController.tryNextStreamAfterPlaybackFailure(
+    detailedError: String
+): Boolean {
+    if (playbackStreamFailoverInProgress || contentType.equals("cloud", ignoreCase = true)) return false
+
+    currentStreamUrl.takeIf { it.isNotBlank() }?.let(failedStreamUrls::add)
+    val failedSource = currentSourceStream
+        ?: _uiState.value.sourceAllStreams.firstOrNull { it.getStreamUrl() == currentStreamUrl }
+    failedSource?.let { failedStreamKeys += it.stableKey() }
+    streamCacheKey?.let { key ->
+        scope.launch(kotlinx.coroutines.NonCancellable) { streamLinkCacheDataStore.remove(key) }
+    }
+
+    playbackStreamFailoverInProgress = true
+    scope.launch {
+        try {
+            val cached = _uiState.value.sourceAllStreams
+            val fetched = if (cached.isEmpty()) fetchPlaybackFailoverStreams() else emptyList()
+            val candidates = (cached + fetched).distinctBy { it.stableKey() }
+            var attempts = 0
+
+            for (candidate in candidates) {
+                if (attempts >= MAX_PLAYBACK_STREAM_FAILOVER_ATTEMPTS) break
+                if (candidate.isExternal() || candidate.stableKey() in failedStreamKeys) continue
+                val directUrl = candidate.getStreamUrl()
+                if (!directUrl.isNullOrBlank() && directUrl in failedStreamUrls) continue
+
+                attempts++
+                failedStreamKeys += candidate.stableKey()
+                val playable = if (candidate.isTorrent() || directUrl.isNullOrBlank()) {
+                    resolveDirectDebridStreamIfNeeded(candidate, currentSeason, currentEpisode)
+                } else {
+                    candidate
+                } ?: continue
+                val playableUrl = playable.getStreamUrl()
+                if (playableUrl.isNullOrBlank() || playableUrl in failedStreamUrls) continue
+
+                currentSourceStream = candidate
+                switchToSourceStream(playable)
+                return@launch
+            }
+
+            _uiState.update {
+                it.copy(
+                    error = detailedError,
+                    isBuffering = false,
+                    showLoadingOverlay = false,
+                    showPauseOverlay = false,
+                    loadingIssueReportVisible = false,
+                    loadingIssueElapsedMs = 0L,
+                    playbackEnded = false,
+                    postPlayMode = null
+                )
+            }
+        } finally {
+            playbackStreamFailoverInProgress = false
+        }
+    }
+    return true
+}
+
+private suspend fun PlayerRuntimeController.fetchPlaybackFailoverStreams(): List<Stream> {
+    val type = contentType ?: return emptyList()
+    val video = currentVideoId ?: contentId ?: return emptyList()
+    val season = currentSeason.takeIf { type.equals("series", true) || type.equals("tv", true) }
+    val episode = currentEpisode.takeIf { type.equals("series", true) || type.equals("tv", true) }
+    return withTimeoutOrNull(PLAYBACK_STREAM_FAILOVER_FETCH_TIMEOUT_MS) {
+        streamRepository.getStreamsFromAllAddons(type, video, season, episode, forceRefresh = true)
+            .first { result -> result is NetworkResult.Success && result.data.any { it.streams.isNotEmpty() } }
+            .let { result -> (result as NetworkResult.Success).data.flatMap { it.streams } }
+    }.orEmpty()
 }
 
 internal fun PlayerRuntimeController.dismissEpisodesPanel() {

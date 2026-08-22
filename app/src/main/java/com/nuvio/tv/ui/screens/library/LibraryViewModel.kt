@@ -35,6 +35,9 @@ import android.content.Context
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -49,6 +52,8 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import com.nuvio.tv.R
 import java.util.Locale
 import javax.inject.Inject
@@ -176,6 +181,8 @@ class LibraryViewModel @Inject constructor(
 
     private var messageClearJob: Job? = null
     private var cloudRefreshJob: Job? = null
+    private var libraryFacetEnrichmentJob: Job? = null
+    private val enrichedLibraryFacets = java.util.concurrent.ConcurrentHashMap<String, LibraryEntry>()
 
     init {
         posterOptions.bind(viewModelScope)
@@ -623,6 +630,7 @@ class LibraryViewModel @Inject constructor(
                 )
             }.collectLatest { bundle ->
                 val (sourceMode, isSyncing, items, listTabs, persistedSortKey, authState, isTrackingAuthenticated, persistedListKey, persistedTypeKey) = bundle
+                val itemsWithFacets = items.map { item -> enrichedLibraryFacets[item.facetKey()] ?: item }
                 _uiState.update { current ->
                     val nextSelectedList = when {
                         sourceMode.providerId != null && isTrackingAuthenticated -> {
@@ -662,7 +670,7 @@ class LibraryViewModel @Inject constructor(
 
                     val updated = current.copy(
                         sourceMode = sourceMode,
-                        allItems = items,
+                        allItems = itemsWithFacets,
                         listTabs = listTabs,
                         availableSortOptions = sortOptions,
                         selectedTypeTab = nextSelectedType,
@@ -676,9 +684,48 @@ class LibraryViewModel @Inject constructor(
                     )
                     updated.withVisibleItems().withVisibleCloudItems()
                 }
+                enrichMissingLibraryFacets(itemsWithFacets)
             }
         }
     }
+
+    private fun enrichMissingLibraryFacets(items: List<LibraryEntry>) {
+        val missing = items.filter { it.genres.isEmpty() || it.releaseInfo.isNullOrBlank() }.take(60)
+        if (missing.isEmpty()) return
+        libraryFacetEnrichmentJob?.cancel()
+        libraryFacetEnrichmentJob = viewModelScope.launch {
+            val semaphore = Semaphore(4)
+            val enriched = coroutineScope {
+                missing.map { item ->
+                    async {
+                        semaphore.withPermit {
+                            val result = metaRepository.getMetaFromAllAddons(item.type, item.id)
+                                .first { it !is com.nuvio.tv.core.network.NetworkResult.Loading }
+                            val meta = (result as? com.nuvio.tv.core.network.NetworkResult.Success)?.data
+                                ?: return@withPermit null
+                            item.copy(
+                                genres = meta.genres.ifEmpty { item.genres },
+                                releaseInfo = meta.releaseInfo ?: item.releaseInfo,
+                                imdbRating = meta.imdbRating ?: item.imdbRating,
+                                description = meta.description ?: item.description,
+                                background = meta.background ?: item.background,
+                                logo = meta.logo ?: item.logo
+                            )
+                        }
+                    }
+                }.awaitAll().filterNotNull()
+            }
+            if (enriched.isEmpty()) return@launch
+            enriched.forEach { enrichedLibraryFacets[it.facetKey()] = it }
+            _uiState.update { state ->
+                state.copy(
+                    allItems = state.allItems.map { item -> enrichedLibraryFacets[item.facetKey()] ?: item }
+                ).withVisibleItems().withVisibleCloudItems()
+            }
+        }
+    }
+
+    private fun LibraryEntry.facetKey(): String = "${type.lowercase(Locale.ROOT)}|${id.lowercase(Locale.ROOT)}"
 
     private fun observeLayoutPreferences() {
         viewModelScope.launch {

@@ -130,7 +130,8 @@ class StreamRepositoryPluginIsolationTest {
                 debridSettingsDataStore = debridSettingsDataStore,
                 tmdbService = tmdbService,
                 debridStreamPresentation = presentation,
-                localDebridAvailabilityService = availability
+                localDebridAvailabilityService = availability,
+                streamDiagnostics = com.nuvio.tv.core.streams.StreamDiagnostics()
             ),
             api = api,
             tmdbService = tmdbService

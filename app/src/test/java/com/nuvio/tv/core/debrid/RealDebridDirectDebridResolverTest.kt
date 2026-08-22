@@ -167,6 +167,11 @@ class RealDebridDirectDebridResolverTest {
             return Response.success("{}".toResponseBody())
         }
 
+        override suspend fun instantAvailability(
+            authorization: String,
+            hash: String
+        ): Response<ResponseBody> = Response.success("{}".toResponseBody())
+
         override suspend fun addMagnet(
             authorization: String,
             magnet: String
@@ -180,7 +185,7 @@ class RealDebridDirectDebridResolverTest {
             id: String
         ): Response<RealDebridTorrentInfoDto> {
             infoCalls++
-            return infoResponses.removeAt(0)
+            return if (infoResponses.size > 1) infoResponses.removeAt(0) else infoResponses.first()
         }
 
         override suspend fun selectFiles(

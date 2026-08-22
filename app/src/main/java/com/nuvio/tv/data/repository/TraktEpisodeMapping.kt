@@ -1,10 +1,16 @@
 package com.nuvio.tv.data.repository
 
+import com.nuvio.tv.domain.model.EpisodeMatchCandidate
+import com.nuvio.tv.domain.model.EpisodeMatchPolicy
+
 internal data class EpisodeMappingEntry(
     val season: Int,
     val episode: Int,
     val title: String? = null,
-    val videoId: String? = null
+    val videoId: String? = null,
+    val absoluteEpisode: Int? = null,
+    val released: String? = null,
+    val aliases: Set<String> = emptySet()
 )
 
 internal fun remapEpisodeByTitleOrIndex(
@@ -68,6 +74,14 @@ private fun remapEpisodeBetweenLists(
         }
         ?: return null
 
+    val structuredMatch = orderedTargetEpisodes.firstOrNull { target ->
+        EpisodeMatchPolicy.evaluate(
+            request = currentSourceEpisode.toMatchCandidate(),
+            candidate = target.toMatchCandidate()
+        ).matches
+    }
+    if (structuredMatch != null) return structuredMatch
+
     // Cache normalized titles so each unique title is computed once, not once per
     // reverseRemap call. For large shows (One Piece: 1181 episodes × 100+ history
     // entries), this avoids ~236,000 redundant regex operations.
@@ -86,6 +100,15 @@ private fun remapEpisodeBetweenLists(
 
     return orderedTargetEpisodes[sourceIndex]
 }
+
+private fun EpisodeMappingEntry.toMatchCandidate() = EpisodeMatchCandidate(
+    season = season,
+    episode = episode,
+    absoluteEpisode = absoluteEpisode,
+    title = title,
+    aliases = aliases,
+    released = released
+)
 
 private val NON_ALPHANUMERIC = Regex("[^a-z0-9]+")
 private val COLLAPSED_SPACES = Regex("\\s+")

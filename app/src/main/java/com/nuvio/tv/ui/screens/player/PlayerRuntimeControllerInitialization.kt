@@ -1553,11 +1553,13 @@ internal fun PlayerRuntimeController.initializePlayer(
 
                         // A fatal playback error commonly means a reused debrid URL expired.
                         // Evict it so reopening this title performs a fresh scrape and resolve.
-                        if (contentType != null && videoId != null) {
-                            val reuseKey = "${contentType.lowercase()}|$videoId"
+                        streamCacheKey?.let { reuseKey ->
                             scope.launch(kotlinx.coroutines.NonCancellable) {
                                 streamLinkCacheDataStore.remove(reuseKey)
                             }
+                        }
+                        if (tryNextStreamAfterPlaybackFailure(detailedError)) {
+                            return
                         }
                         _uiState.update {
                             it.copy(

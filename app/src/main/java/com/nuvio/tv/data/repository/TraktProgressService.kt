@@ -1371,11 +1371,8 @@ class TraktProgressService @Inject constructor(
 
             items.forEach { item ->
                 val ids = item.show?.ids ?: return@forEach
-                val keys = buildList {
-                    ids.imdb?.takeIf { it.isNotBlank() }?.let { add(it) }
-                    ids.tmdb?.let { add("tmdb:$it") }
-                    ids.trakt?.let { add("trakt:$it") }
-                }
+                val keys = watchedContentAliases(ids, contentType = "series")
+                    .filterNot { it == ids.slug }
                 if (keys.size > 1) {
                     for (key in keys) {
                         val existing = siblingsMap[key]
@@ -1416,11 +1413,9 @@ class TraktProgressService @Inject constructor(
             items.forEach { item ->
                 val show = item.show ?: return@forEach
                 val ids = show.ids ?: return@forEach
-                val keys = buildList {
-                    ids.imdb?.takeIf { it.isNotBlank() }?.let { add(it) }
-                    ids.tmdb?.let { add("tmdb:$it") }
-                    ids.trakt?.let { add("trakt:$it") }
-                }.filter { it !in ambiguousIds }
+                val keys = watchedContentAliases(ids, contentType = "series")
+                    .filterNot { it == ids.slug }
+                    .filter { it !in ambiguousIds }
                 if (keys.isEmpty()) return@forEach
                 // Resolve a Trakt-accepted path ID: prefer slug, then trakt numeric
                 val traktAccepted = ids.slug?.takeIf { it.isNotBlank() }
@@ -1869,13 +1864,7 @@ class TraktProgressService @Inject constructor(
     }
 
     private fun watchedMovieLookupKeys(ids: TraktIdsDto?): List<String> {
-        if (ids == null) return emptyList()
-        return buildList {
-            ids.imdb?.takeIf { it.isNotBlank() }?.let { add(it) }
-            ids.tmdb?.let { add("tmdb:$it") }
-            ids.trakt?.let { add("trakt:$it") }
-            ids.slug?.takeIf { it.isNotBlank() }?.let { add(it) }
-        }
+        return watchedContentAliases(ids, contentType = "movie")
     }
 
     private suspend fun fetchAllProgressSnapshot(force: Boolean = false): List<WatchProgress> {

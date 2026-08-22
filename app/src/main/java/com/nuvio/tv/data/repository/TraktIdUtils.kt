@@ -56,6 +56,20 @@ internal fun normalizeContentId(ids: TraktIdsDto?, fallback: String? = null): St
     return fallback?.takeIf { it.isNotBlank() } ?: ""
 }
 
+internal fun watchedContentAliases(ids: TraktIdsDto?, contentType: String): List<String> {
+    if (ids == null) return emptyList()
+    val tmdbType = if (contentType.equals("movie", ignoreCase = true)) "movie" else "series"
+    return buildList {
+        ids.imdb?.trim()?.takeIf { it.isNotBlank() }?.let { add(it.lowercase()) }
+        ids.tmdb?.let {
+            add("tmdb:$it")
+            add("tmdb:$tmdbType:$it")
+        }
+        ids.trakt?.let { add("trakt:$it") }
+        ids.slug?.trim()?.takeIf { it.isNotBlank() }?.let { add(it) }
+    }.distinct()
+}
+
 internal fun toTraktPathId(contentId: String): String {
     val parsed = parseContentIds(contentId)
     return when {

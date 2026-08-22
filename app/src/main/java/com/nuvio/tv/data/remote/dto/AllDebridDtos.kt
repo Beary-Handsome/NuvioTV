@@ -55,6 +55,22 @@ data class AllDebridMagnetStatusDto(
 )
 
 @JsonClass(generateAdapter = true)
+data class AllDebridMagnetListDto(
+    @Json(name = "magnets") val magnets: List<AllDebridMagnetInfoDto>?
+)
+
+@JsonClass(generateAdapter = true)
+data class AllDebridMagnetFilesDto(
+    @Json(name = "magnets") val magnets: List<AllDebridMagnetFilesItemDto>?
+)
+
+@JsonClass(generateAdapter = true)
+data class AllDebridMagnetFilesItemDto(
+    @Json(name = "id") val id: Long?,
+    @Json(name = "files") val files: List<AllDebridFileDto>?
+)
+
+@JsonClass(generateAdapter = true)
 data class AllDebridMagnetInfoDto(
     @Json(name = "id") val id: Long?,
     @Json(name = "filename") val filename: String?,

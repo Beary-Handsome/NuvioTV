@@ -134,8 +134,11 @@ data class LibraryUiState(
     val sortSelectionVersion: Long = 0L,
     val availableGenres: List<FilterOption> = emptyList(),
     val availableYears: List<FilterOption> = emptyList(),
+    val availableLanguages: List<FilterOption> = emptyList(),
     val selectedGenre: String? = null,
     val selectedYear: String? = null,
+    val selectedMinimumRating: Float? = null,
+    val selectedLanguage: String? = null,
     val selectedWatchedFilter: LibraryWatchedFilter = LibraryWatchedFilter.ALL,
     val watchedMovieIds: Set<String> = emptySet(),
     val watchedSeriesIds: Set<String> = emptySet(),
@@ -264,6 +267,18 @@ class LibraryViewModel @Inject constructor(
         _uiState.update { current ->
             val updated = current.copy(selectedYear = key)
             updated.withVisibleItems()
+        }
+    }
+
+    fun onSelectMinimumRating(rating: Float?) {
+        _uiState.update { current ->
+            current.copy(selectedMinimumRating = rating).withVisibleItems()
+        }
+    }
+
+    fun onSelectLanguage(language: String?) {
+        _uiState.update { current ->
+            current.copy(selectedLanguage = language).withVisibleItems()
         }
     }
 
@@ -690,7 +705,10 @@ class LibraryViewModel @Inject constructor(
     }
 
     private fun enrichMissingLibraryFacets(items: List<LibraryEntry>) {
-        val missing = items.filter { it.genres.isEmpty() || it.releaseInfo.isNullOrBlank() }.take(60)
+        val missing = items.filter {
+            it.genres.isEmpty() || it.releaseInfo.isNullOrBlank() ||
+                it.imdbRating == null || it.language.isNullOrBlank()
+        }.take(60)
         if (missing.isEmpty()) return
         libraryFacetEnrichmentJob?.cancel()
         libraryFacetEnrichmentJob = viewModelScope.launch {
@@ -709,7 +727,8 @@ class LibraryViewModel @Inject constructor(
                                 imdbRating = meta.imdbRating ?: item.imdbRating,
                                 description = meta.description ?: item.description,
                                 background = meta.background ?: item.background,
-                                logo = meta.logo ?: item.logo
+                                logo = meta.logo ?: item.logo,
+                                language = meta.language ?: item.language
                             )
                         }
                     }
@@ -934,15 +953,23 @@ class LibraryViewModel @Inject constructor(
             genreFiltered
         }
 
+        val ratingFiltered = selectedMinimumRating?.let { minimum ->
+            yearFiltered.filter { entry -> (entry.imdbRating ?: 0f) >= minimum }
+        } ?: yearFiltered
+
+        val languageFiltered = selectedLanguage?.let { language ->
+            ratingFiltered.filter { entry -> entry.language?.equals(language, ignoreCase = true) == true }
+        } ?: ratingFiltered
+
         // Step 5: Watched status filter
         val watchedFiltered = when (selectedWatchedFilter) {
-            LibraryWatchedFilter.ALL -> yearFiltered
-            LibraryWatchedFilter.WATCHED -> yearFiltered.filter { entry ->
+            LibraryWatchedFilter.ALL -> languageFiltered
+            LibraryWatchedFilter.WATCHED -> languageFiltered.filter { entry ->
                 val isMovie = entry.type.equals("movie", ignoreCase = true)
                 if (isMovie) watchedMovieIds.contains(entry.id)
                 else watchedSeriesIds.contains(entry.id)
             }
-            LibraryWatchedFilter.UNWATCHED -> yearFiltered.filter { entry ->
+            LibraryWatchedFilter.UNWATCHED -> languageFiltered.filter { entry ->
                 val isMovie = entry.type.equals("movie", ignoreCase = true)
                 if (isMovie) !watchedMovieIds.contains(entry.id)
                 else !watchedSeriesIds.contains(entry.id)
@@ -986,6 +1013,14 @@ class LibraryViewModel @Inject constructor(
         val yearOptions = yearCounts.entries
             .sortedByDescending { it.key }
             .map { (year, count) -> FilterOption(key = year, label = year, count = count) }
+
+        val languageOptions = typeFiltered.mapNotNull { it.language?.trim()?.lowercase(Locale.ROOT) }
+            .filter { it.isNotBlank() }
+            .groupingBy { it }
+            .eachCount()
+            .entries
+            .sortedBy { it.key }
+            .map { (language, count) -> FilterOption(language, language.uppercase(Locale.ROOT), count) }
 
         // Type tab counts: from listFiltered, applying genre+year filters
         val itemsForTypeCounts = listFiltered.filter { entry ->
@@ -1038,8 +1073,12 @@ class LibraryViewModel @Inject constructor(
             availableTypeTabs = typeTabsWithCounts,
             availableGenres = genreOptions,
             availableYears = yearOptions,
+            availableLanguages = languageOptions,
             selectedGenre = validGenre,
-            selectedYear = validYear
+            selectedYear = validYear,
+            selectedLanguage = selectedLanguage?.takeIf { selected ->
+                languageOptions.any { it.key.equals(selected, ignoreCase = true) }
+            }
         )
     }
 

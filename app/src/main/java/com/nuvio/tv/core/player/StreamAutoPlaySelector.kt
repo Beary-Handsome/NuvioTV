@@ -21,13 +21,16 @@ object StreamAutoPlaySelector {
             }
         }
 
-        val (directDebridEntries, remainingEntries) = streams.partition {
+        val (cloudEntries, nonCloudEntries) = streams.partition {
+            it.streams.any { stream -> stream.behaviorHints?.bingeGroup?.startsWith("cloud:") == true }
+        }
+        val (directDebridEntries, remainingEntries) = nonCloudEntries.partition {
             it.streams.any { stream -> stream.isDirectDebrid() }
         }
-        if (installedOrder.isEmpty()) return directDebridEntries + remainingEntries
+        if (installedOrder.isEmpty()) return cloudEntries + directDebridEntries + remainingEntries
         val (addonEntries, pluginEntries) = remainingEntries.partition { it.addonName in addonRankByName }
         val orderedAddons = addonEntries.sortedBy { addonRankByName.getValue(it.addonName) }
-        return directDebridEntries + orderedAddons + pluginEntries
+        return cloudEntries + directDebridEntries + orderedAddons + pluginEntries
     }
 
     private fun isPlayable(stream: Stream): Boolean {

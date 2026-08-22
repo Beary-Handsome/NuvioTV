@@ -1,8 +1,9 @@
 package com.nuvio.tv.core.debrid
 
 import com.nuvio.tv.data.local.DebridSettingsDataStore
-import com.nuvio.tv.domain.model.StreamBehaviorHints
 import com.nuvio.tv.domain.model.Stream
+import com.nuvio.tv.domain.model.StreamBehaviorHints
+import com.nuvio.tv.domain.model.ProxyHeaders
 import com.nuvio.tv.domain.model.StreamClientResolve
 import com.nuvio.tv.domain.model.StreamDebridCacheState
 import com.nuvio.tv.core.streams.StreamDiagnosticStage
@@ -33,6 +34,59 @@ class DirectDebridResolver @Inject constructor(
     private val diagnostics: StreamDiagnostics,
     private val streamUrlFreshnessValidator: StreamUrlFreshnessValidator
 ) {
+    suspend fun searchEasyNewsStreams(
+        title: String,
+        season: Int?,
+        episode: Int?,
+        year: Int?
+    ): List<Stream> {
+        val settings = dataStore.settings.first()
+        val username = settings.easynewsUsername.trim()
+        val password = settings.easynewsPassword.trim()
+        if (username.isBlank() || password.isBlank() || title.isBlank()) return emptyList()
+
+        return easynewsResolver.search(
+            username = username,
+            password = password,
+            title = title,
+            season = season,
+            episode = episode,
+            year = year,
+            limit = 12
+        ).map { result ->
+            val (url, authorization) = easynewsResolver.buildStreamUrl(
+                username = username,
+                password = password,
+                hash = result.hash,
+                filename = result.filename
+            )
+            Stream(
+                name = "[EasyNews] ${result.sizeText}".trim(),
+                title = result.filename,
+                description = result.filename,
+                url = url,
+                ytId = null,
+                infoHash = null,
+                fileIdx = null,
+                externalUrl = null,
+                behaviorHints = StreamBehaviorHints(
+                    notWebReady = false,
+                    bingeGroup = "easynews",
+                    countryWhitelist = null,
+                    proxyHeaders = ProxyHeaders(
+                        request = mapOf("Authorization" to authorization),
+                        response = emptyMap()
+                    ),
+                    videoHash = result.hash,
+                    videoSize = result.sizeBytes,
+                    filename = result.filename
+                ),
+                addonName = "EasyNews",
+                addonLogo = null,
+                quality = null
+            )
+        }
+    }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val mutex = Mutex()
     private val resolvedCache = mutableMapOf<String, CachedDirectDebridResolve>()

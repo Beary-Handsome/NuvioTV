@@ -358,11 +358,14 @@ fun LibraryScreen(
                     sortOptions = uiState.availableSortOptions,
                     genres = uiState.availableGenres,
                     years = uiState.availableYears,
+                    languages = uiState.availableLanguages,
                     selectedListKey = uiState.selectedListKey,
                     selectedTypeTab = uiState.selectedTypeTab,
                     selectedSortOption = uiState.selectedSortOption,
                     selectedGenre = uiState.selectedGenre,
                     selectedYear = uiState.selectedYear,
+                    selectedMinimumRating = uiState.selectedMinimumRating,
+                    selectedLanguage = uiState.selectedLanguage,
                     selectedWatchedFilter = uiState.selectedWatchedFilter,
                     primaryFocusRequester = selectorFocusRequester,
                     expandedPicker = expandedPicker,
@@ -387,6 +390,14 @@ fun LibraryScreen(
                     },
                     onSelectYear = { key ->
                         viewModel.onSelectYear(key)
+                        expandedPicker = null
+                    },
+                    onSelectMinimumRating = { rating ->
+                        viewModel.onSelectMinimumRating(rating)
+                        expandedPicker = null
+                    },
+                    onSelectLanguage = { language ->
+                        viewModel.onSelectLanguage(language)
                         expandedPicker = null
                     },
                     onSelectWatchedFilter = { filter ->
@@ -1032,11 +1043,14 @@ private fun LibrarySelectorsRow(
     sortOptions: List<LibrarySortOption>,
     genres: List<FilterOption>,
     years: List<FilterOption>,
+    languages: List<FilterOption>,
     selectedListKey: String?,
     selectedTypeTab: LibraryTypeTab?,
     selectedSortOption: LibrarySortOption,
     selectedGenre: String?,
     selectedYear: String?,
+    selectedMinimumRating: Float?,
+    selectedLanguage: String?,
     selectedWatchedFilter: LibraryWatchedFilter,
     primaryFocusRequester: FocusRequester,
     expandedPicker: String?,
@@ -1046,6 +1060,8 @@ private fun LibrarySelectorsRow(
     onSelectSort: (LibrarySortOption) -> Unit,
     onSelectGenre: (String?) -> Unit,
     onSelectYear: (String?) -> Unit,
+    onSelectMinimumRating: (Float?) -> Unit,
+    onSelectLanguage: (String?) -> Unit,
     onSelectWatchedFilter: (LibraryWatchedFilter) -> Unit
 ) {
     val selectedListLabel = listTabs.firstOrNull { it.key == selectedListKey }?.localizedTitle()
@@ -1179,6 +1195,44 @@ private fun LibrarySelectorsRow(
                         ?.let(onSelectWatchedFilter)
                 }
             )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md)
+        ) {
+            LibraryDropdownPicker(
+                modifier = Modifier.weight(1f),
+                title = stringResource(R.string.library_filter_rating),
+                value = selectedMinimumRating?.let { "$it+" } ?: allLabel,
+                selectedValue = selectedMinimumRating?.toString() ?: "__all__",
+                expanded = expandedPicker == "rating",
+                options = listOf(
+                    LibraryOption(allLabel, "__all__"),
+                    LibraryOption("9+", "9"), LibraryOption("8+", "8"),
+                    LibraryOption("7+", "7"), LibraryOption("6+", "6")
+                ),
+                onExpandedChange = { onExpandedChange("rating", it) },
+                onSelect = { option ->
+                    onSelectMinimumRating(option.value.takeUnless { it == "__all__" }?.toFloatOrNull())
+                }
+            )
+            if (languages.isNotEmpty()) {
+                LibraryDropdownPicker(
+                    modifier = Modifier.weight(1f),
+                    title = stringResource(R.string.library_filter_language),
+                    value = selectedLanguage?.uppercase() ?: allLabel,
+                    selectedValue = selectedLanguage ?: "__all__",
+                    expanded = expandedPicker == "language",
+                    options = listOf(LibraryOption(allLabel, "__all__")) + languages.map {
+                        LibraryOption("${it.label} (${it.count})", it.key)
+                    },
+                    onExpandedChange = { onExpandedChange("language", it) },
+                    onSelect = { option ->
+                        onSelectLanguage(option.value.takeUnless { it == "__all__" })
+                    }
+                )
+            }
         }
     }
 }

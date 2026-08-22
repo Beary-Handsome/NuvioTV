@@ -167,6 +167,11 @@ class RealDebridDirectDebridResolverTest {
             return Response.success("{}".toResponseBody())
         }
 
+        override suspend fun listTorrents(
+            authorization: String,
+            limit: Int
+        ): Response<List<RealDebridTorrentInfoDto>> = Response.success(emptyList())
+
         override suspend fun instantAvailability(
             authorization: String,
             hash: String

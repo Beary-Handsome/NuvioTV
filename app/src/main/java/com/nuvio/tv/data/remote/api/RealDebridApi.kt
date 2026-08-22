@@ -12,8 +12,15 @@ import retrofit2.http.GET
 import retrofit2.http.Header
 import retrofit2.http.POST
 import retrofit2.http.Path
+import retrofit2.http.Query
 
 interface RealDebridApi {
+    @GET("torrents")
+    suspend fun listTorrents(
+        @Header("Authorization") authorization: String,
+        @Query("limit") limit: Int = 5000
+    ): Response<List<RealDebridTorrentInfoDto>>
+
     @GET("user")
     suspend fun getUser(
         @Header("Authorization") authorization: String

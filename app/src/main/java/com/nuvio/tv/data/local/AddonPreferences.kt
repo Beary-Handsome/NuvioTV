@@ -1,6 +1,7 @@
 package com.nuvio.tv.data.local
 
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
@@ -25,6 +26,12 @@ class AddonPreferences @Inject constructor(
 ) {
     companion object {
         private const val FEATURE = "addon_preferences"
+        private const val RIVEN_DEFAULT_URL = "https://rivenmedia.duckdns.org/riven"
+        private val SUPERSEDED_RIVEN_DEFAULTS = setOf(
+            "https://rivenmedia.duckdns.org/comet",
+            "https://rivenmedia.duckdns.org/mediafusion",
+            "https://rivenmedia.duckdns.org/easynews-addon"
+        )
     }
 
     private fun effectiveProfileId(): Int {
@@ -48,6 +55,7 @@ class AddonPreferences @Inject constructor(
     private val legacyUrlsKey = stringSetPreferencesKey("installed_addon_urls")
     private val userSetNamesKey = stringPreferencesKey("addon_user_set_names")
     private val addonEnabledStatesKey = stringPreferencesKey("installed_addon_enabled_states")
+    private val rivenDefaultsConsolidatedKey = booleanPreferencesKey("riven_defaults_consolidated_v2")
     private val manifestSuffix = "/manifest.json"
 
     private fun canonicalizeUrl(url: String): String {
@@ -85,15 +93,35 @@ class AddonPreferences @Inject constructor(
 
     suspend fun ensureMigrated() {
         val ds = store()
-        val prefs = ds.data.first()
-        if (prefs[orderedUrlsKey] == null) {
-            val legacySet = prefs[legacyUrlsKey] ?: getDefaultAddons()
-            ds.edit { preferences ->
+        ds.edit { preferences ->
+            if (preferences[orderedUrlsKey] == null) {
+                val legacySet = preferences[legacyUrlsKey] ?: getDefaultAddons()
                 preferences[orderedUrlsKey] = gson.toJson(legacySet.toList())
                 preferences.remove(legacyUrlsKey)
             }
+            if (preferences[rivenDefaultsConsolidatedKey] != true) {
+                val current = getCurrentList(preferences)
+                val removedLegacyDefault = current.any(::isSupersededRivenDefault)
+                val consolidated = current.filterNot(::isSupersededRivenDefault).toMutableList()
+                if (removedLegacyDefault && consolidated.none(::isRivenDefault)) {
+                    consolidated.add(0, RIVEN_DEFAULT_URL)
+                }
+                preferences[orderedUrlsKey] = gson.toJson(consolidated)
+                val states = getCurrentEnabledStates(preferences).toMutableMap()
+                states.keys.removeAll { isSupersededRivenDefault(it) }
+                preferences[addonEnabledStatesKey] = gson.toJson(states)
+                preferences[rivenDefaultsConsolidatedKey] = true
+            }
         }
     }
+
+    private fun isRivenDefault(url: String): Boolean =
+        canonicalizeUrl(url).equals(RIVEN_DEFAULT_URL, ignoreCase = true)
+
+    private fun isSupersededRivenDefault(url: String): Boolean =
+        SUPERSEDED_RIVEN_DEFAULTS.any { legacy ->
+            canonicalizeUrl(url).equals(legacy, ignoreCase = true)
+        }
 
     suspend fun addAddon(url: String) {
            val active = profileManager.activeProfile
@@ -221,10 +249,6 @@ class AddonPreferences @Inject constructor(
         }
     }
 
-    private fun getDefaultAddons(): Set<String> = setOf(
-        "https://rivenmedia.duckdns.org/riven",
-        "https://rivenmedia.duckdns.org/comet",
-        "https://rivenmedia.duckdns.org/mediafusion",
-        "https://rivenmedia.duckdns.org/easynews-addon"
-    )
+    private fun getDefaultAddons(): Set<String> = setOf(RIVEN_DEFAULT_URL)
+
 }

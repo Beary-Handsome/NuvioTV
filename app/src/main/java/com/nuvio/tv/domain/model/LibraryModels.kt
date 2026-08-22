@@ -28,7 +28,8 @@ data class LibraryEntry(
     val mediaCategory: String? = null,
     override val trackingProviderId: String? = null,
     override val trackingProviderItemId: String? = null,
-    override val trackingSourceUrl: String? = null
+    override val trackingSourceUrl: String? = null,
+    val language: String? = null
 ) : TrackingAttributedItem {
     override val trackingContentId: String
         get() = id
@@ -46,7 +47,8 @@ data class LibraryEntry(
             description = description,
             releaseInfo = releaseInfo,
             imdbRating = imdbRating,
-            genres = genres
+            genres = genres,
+            language = language
         )
     }
 }

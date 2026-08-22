@@ -102,6 +102,9 @@ internal fun DiscoverSection(
     onSelectType: (String) -> Unit,
     onSelectCatalog: (String) -> Unit,
     onSelectGenre: (String?) -> Unit,
+    onSelectYear: (Int?) -> Unit,
+    onSelectMinimumRating: (Float?) -> Unit,
+    onSelectLanguage: (String?) -> Unit,
     onLoadMore: () -> Unit,
     onItemLongPress: (MetaPreview, String) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
@@ -202,6 +205,69 @@ internal fun DiscoverSection(
             )
         }
 
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md)
+        ) {
+            DiscoverDropdownPicker(
+                modifier = Modifier.weight(1f),
+                title = stringResource(R.string.discover_filter_year),
+                value = uiState.selectedDiscoverYear?.toString() ?: stringResource(R.string.discover_filter_any),
+                selectedValue = uiState.selectedDiscoverYear?.toString() ?: "__any__",
+                expanded = expandedPicker == "year",
+                options = buildList {
+                    add(DiscoverOption(stringResource(R.string.discover_filter_any), "__any__"))
+                    val currentYear = java.time.Year.now().value
+                    addAll((currentYear downTo 1950).map { DiscoverOption(it.toString(), it.toString()) })
+                },
+                onExpandedChange = { expandedPicker = if (it) "year" else null },
+                onSelect = {
+                    onSelectYear(it.value.takeUnless { value -> value == "__any__" }?.toIntOrNull())
+                    expandedPicker = null
+                },
+                blockFocus = blockFilterFocus
+            )
+            DiscoverDropdownPicker(
+                modifier = Modifier.weight(1f),
+                title = stringResource(R.string.discover_filter_rating),
+                value = uiState.selectedDiscoverMinimumRating?.let { "$it+" }
+                    ?: stringResource(R.string.discover_filter_any),
+                selectedValue = uiState.selectedDiscoverMinimumRating?.toString() ?: "__any__",
+                expanded = expandedPicker == "rating",
+                options = listOf(
+                    DiscoverOption(stringResource(R.string.discover_filter_any), "__any__"),
+                    DiscoverOption("9+", "9"), DiscoverOption("8+", "8"),
+                    DiscoverOption("7+", "7"), DiscoverOption("6+", "6")
+                ),
+                onExpandedChange = { expandedPicker = if (it) "rating" else null },
+                onSelect = {
+                    onSelectMinimumRating(it.value.takeUnless { value -> value == "__any__" }?.toFloatOrNull())
+                    expandedPicker = null
+                },
+                blockFocus = blockFilterFocus
+            )
+            DiscoverDropdownPicker(
+                modifier = Modifier.weight(1f),
+                title = stringResource(R.string.discover_filter_language),
+                value = uiState.selectedDiscoverLanguage?.uppercase()
+                    ?: stringResource(R.string.discover_filter_any),
+                selectedValue = uiState.selectedDiscoverLanguage ?: "__any__",
+                expanded = expandedPicker == "language",
+                options = buildList {
+                    add(DiscoverOption(stringResource(R.string.discover_filter_any), "__any__"))
+                    addAll(listOf("en", "es", "fr", "de", "it", "pt", "ja", "ko", "zh", "hi").map {
+                        DiscoverOption(it.uppercase(), it)
+                    })
+                },
+                onExpandedChange = { expandedPicker = if (it) "language" else null },
+                onSelect = {
+                    onSelectLanguage(it.value.takeUnless { value -> value == "__any__" })
+                    expandedPicker = null
+                },
+                blockFocus = blockFilterFocus
+            )
+        }
+
         selectedCatalog?.let { catalog ->
             val metadataSegments = buildList {
                 add(catalog.addonName)
@@ -211,6 +277,9 @@ internal fun DiscoverSection(
                         ?.let(::add)
                 }
                 uiState.selectedDiscoverGenre?.let { add(localizedGenreLabel(it)) }
+                uiState.selectedDiscoverYear?.let { add(it.toString()) }
+                uiState.selectedDiscoverMinimumRating?.let { add("$it+") }
+                uiState.selectedDiscoverLanguage?.let { add(it.uppercase()) }
             }
             Text(
                 text = metadataSegments.joinToString(" • "),
@@ -259,7 +328,14 @@ internal fun DiscoverSection(
                     onItemLongPress = { item ->
                         onItemLongPress(item, selectedCatalog?.addonBaseUrl ?: "")
                     },
-                    filterKey = "${uiState.selectedDiscoverType}|${uiState.selectedDiscoverCatalogKey}|${uiState.selectedDiscoverGenre}"
+                    filterKey = listOf(
+                        uiState.selectedDiscoverType,
+                        uiState.selectedDiscoverCatalogKey,
+                        uiState.selectedDiscoverGenre,
+                        uiState.selectedDiscoverYear,
+                        uiState.selectedDiscoverMinimumRating,
+                        uiState.selectedDiscoverLanguage
+                    ).joinToString("|")
                 )
                 }
             }

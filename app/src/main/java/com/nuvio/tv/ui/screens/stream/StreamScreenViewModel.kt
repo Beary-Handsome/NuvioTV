@@ -6,6 +6,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.R
+import com.nuvio.tv.core.cloud.CloudLibraryRepository
 import com.nuvio.tv.core.debrid.DebridStreamPresentation
 import com.nuvio.tv.core.debrid.DirectDebridResolveResult
 import com.nuvio.tv.core.debrid.DirectDebridResolver
@@ -49,6 +50,7 @@ import com.nuvio.tv.ui.components.SourceChipStatus
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -62,6 +64,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 
 private const val TAG = "StreamScreenViewModel"
@@ -91,6 +94,7 @@ class StreamScreenViewModel @Inject constructor(
     private val subtitleRepository: com.nuvio.tv.domain.repository.SubtitleRepository,
     private val subtitleFileCache: com.nuvio.tv.core.player.SubtitleFileCache,
     private val torrentService: TorrentService,
+    private val cloudLibraryRepository: CloudLibraryRepository,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
     private var autoPlayHandledForSession = false
@@ -604,7 +608,14 @@ class StreamScreenViewModel @Inject constructor(
             var autoSelectTriggered = false
             var timeoutElapsed = false
             var debridPreparationLaunched = false
+            var cloudStreamGroups: List<AddonStreams> = emptyList()
             val isUnlimitedTimeout = playerSettings.streamAutoPlayTimeoutSeconds == PlayerSettings.STREAM_AUTOPLAY_TIMEOUT_UNLIMITED
+
+            fun withCloudStreams(groups: List<AddonStreams>): List<AddonStreams> {
+                if (cloudStreamGroups.isEmpty()) return groups
+                val cloudNames = cloudStreamGroups.mapTo(hashSetOf()) { it.addonName }
+                return cloudStreamGroups + groups.filterNot { it.addonName in cloudNames }
+            }
 
             fun launchDirectDebridPreparationIfNeeded(streamGroups: List<AddonStreams>) {
                 if (debridPreparationLaunched || streamGroups.none { group -> group.streams.any { it.isReadyForDebridPreparation() } }) {
@@ -658,16 +669,17 @@ class StreamScreenViewModel @Inject constructor(
                 ).collect { result ->
                     when (result) {
                         is NetworkResult.Success -> {
-                            lastSuccessData = result.data
-                            applySuccess(result.data, isAllLoaded = false)
-                            launchDirectDebridPreparationIfNeeded(result.data)
+                            val mergedResult = withCloudStreams(result.data)
+                            lastSuccessData = mergedResult
+                            applySuccess(mergedResult, isAllLoaded = false)
+                            launchDirectDebridPreparationIfNeeded(mergedResult)
 
                             if (autoSelectTriggered || resolvedAutoPlayTarget || autoPlayHandledForSession) {
                                 // Already resolved — nothing more to do.
                             } else if (timeoutElapsed) {
                                 // Timeout elapsed: run full auto-select (binge
                                 // group preferred, then fallback to mode).
-                                applySuccess(result.data, isAllLoaded = true)
+                                applySuccess(mergedResult, isAllLoaded = true)
                                 if (resolvedAutoPlayTarget) {
                                     autoSelectTriggered = true
                                 } else if (directAutoPlayFlowEnabledForSession && !isUnlimitedTimeout) {
@@ -676,7 +688,7 @@ class StreamScreenViewModel @Inject constructor(
                                     // debrid cache check, wait for the next emission
                                     // (which will carry the CACHED/NOT_CACHED result)
                                     // instead of showing the picker immediately.
-                                    val hasCheckingTorrents = result.data.any { group ->
+                                    val hasCheckingTorrents = mergedResult.any { group ->
                                         group.streams.any { s ->
                                             s.isTorrent() && s.debridCacheStatus?.state == com.nuvio.tv.domain.model.StreamDebridCacheState.CHECKING
                                         }
@@ -699,7 +711,7 @@ class StreamScreenViewModel @Inject constructor(
                                 // match is found we can start playback immediately
                                 // without waiting for the full timeout.
                                 val orderedStreams = StreamAutoPlaySelector.orderAddonStreams(
-                                    result.data, installedAddonOrder
+                                    mergedResult, installedAddonOrder
                                 )
                                 val allStreams = orderedStreams.flatMap { it.streams }
                                 val earlyMatch = StreamAutoPlaySelector.selectAutoPlayStream(
@@ -777,6 +789,44 @@ class StreamScreenViewModel @Inject constructor(
                 }
             }
 
+            val cloudLoad = async {
+                val cloudStreams = cloudLibraryRepository.findMatchingStreams(
+                    title = contentName?.takeIf { it.isNotBlank() } ?: title,
+                    year = year?.take(4)?.toIntOrNull(),
+                    season = season,
+                    episode = episode
+                )
+                cloudStreamGroups = cloudStreams
+                    .groupBy { it.addonName }
+                    .map { (addonName, streams) ->
+                        AddonStreams(addonName = addonName, addonLogo = null, streams = streams)
+                    }
+                if (cloudStreamGroups.isNotEmpty()) {
+                    val merged = withCloudStreams(lastSuccessData.orEmpty())
+                    lastSuccessData = merged
+                    applySuccess(merged, isAllLoaded = timeoutElapsed)
+                }
+            }
+
+            val easyNewsLoad = launch {
+                val easyNewsStreams = directDebridResolver.searchEasyNewsStreams(
+                    title = contentName?.takeIf { it.isNotBlank() } ?: title,
+                    season = season,
+                    episode = episode,
+                    year = year?.take(4)?.toIntOrNull()
+                )
+                if (easyNewsStreams.isEmpty()) return@launch
+                val easyNewsGroup = AddonStreams(
+                    addonName = "EasyNews",
+                    addonLogo = null,
+                    streams = easyNewsStreams
+                )
+                val merged = lastSuccessData.orEmpty()
+                    .filterNot { it.addonName.equals("EasyNews", ignoreCase = true) } + easyNewsGroup
+                lastSuccessData = merged
+                applySuccess(merged, isAllLoaded = timeoutElapsed)
+            }
+
             // Timeout semantics:
             // - 0 (instant): timeoutElapsed immediately, first addon response
             //   triggers auto-select; if no match -> dismiss overlay at once.
@@ -788,6 +838,9 @@ class StreamScreenViewModel @Inject constructor(
             val timeoutMs = playerSettings.streamAutoPlayTimeoutSeconds * 1_000L
             if (PlayerSettings.isBoundedTimeout(playerSettings.streamAutoPlayTimeoutSeconds)) {
                 delay(timeoutMs)
+            }
+            if (directFlowActive) {
+                withTimeoutOrNull(5_000L) { cloudLoad.await() }
             }
             timeoutElapsed = true
             val directDebridLoadedByTimeout = !directDebridAvailable ||
@@ -881,6 +934,8 @@ class StreamScreenViewModel @Inject constructor(
             // being fetched — which makes OnResume think there is nothing
             // left to do when the user returns from the player.
             streamLoadInner.join()
+            easyNewsLoad.join()
+            cloudLoad.await()
             // Only mark completed if the coroutine was NOT cancelled.
             // ensureActive() throws CancellationException if the scope
             // was cancelled (e.g. user selected a stream and navigated

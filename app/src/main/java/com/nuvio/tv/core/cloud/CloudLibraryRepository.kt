@@ -7,19 +7,33 @@ import com.nuvio.tv.core.debrid.DebridProviders
 import com.nuvio.tv.core.debrid.DebridServiceCredential
 import com.nuvio.tv.core.debrid.supports
 import com.nuvio.tv.data.local.DebridSettingsDataStore
+import com.nuvio.tv.domain.model.Stream
+import com.nuvio.tv.domain.model.StreamBehaviorHints
+import com.nuvio.tv.domain.model.StreamDebridCacheState
+import com.nuvio.tv.domain.model.StreamDebridCacheStatus
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 
 @Singleton
 class CloudLibraryRepository @Inject constructor(
     @ApplicationContext private val context: Context,
     private val dataStore: DebridSettingsDataStore,
     torboxApi: TorboxCloudLibraryProviderApi,
-    premiumizeApi: PremiumizeCloudLibraryProviderApi
+    premiumizeApi: PremiumizeCloudLibraryProviderApi,
+    realDebridApi: RealDebridCloudLibraryProviderApi,
+    allDebridApi: AllDebridCloudLibraryProviderApi
 ) {
-    private val providerApis: List<CloudLibraryProviderApi> = listOf(torboxApi, premiumizeApi)
+    private val providerApis: List<CloudLibraryProviderApi> = listOf(
+        torboxApi,
+        premiumizeApi,
+        realDebridApi,
+        allDebridApi
+    )
 
     suspend fun refresh(): CloudLibraryUiState {
         val settings = dataStore.settings.first()
@@ -97,5 +111,61 @@ class CloudLibraryRepository @Inject constructor(
             ?.let(DebridProviders::configuredServices)
             .orEmpty()
             .filter { credential -> credential.provider.supports(DebridProviderCapability.CloudLibrary) }
+    }
+
+    suspend fun findMatchingStreams(
+        title: String,
+        year: Int?,
+        season: Int?,
+        episode: Int?
+    ): List<Stream> {
+        val state = refresh()
+        val matches = CloudMediaMatcher.findMatches(
+            items = state.items,
+            title = title,
+            year = year,
+            season = season,
+            episode = episode
+        ).take(MAX_CLOUD_STREAM_MATCHES)
+        return coroutineScope {
+            matches.map { match ->
+                async {
+                    when (val result = resolvePlayback(match.item, match.file)) {
+                        is CloudLibraryPlaybackResult.Success -> Stream(
+                            name = "[${match.item.providerName} Cloud] ${match.file.name}",
+                            title = match.file.name,
+                            description = null,
+                            url = result.url,
+                            ytId = null,
+                            infoHash = null,
+                            fileIdx = null,
+                            externalUrl = null,
+                            behaviorHints = StreamBehaviorHints(
+                                notWebReady = false,
+                                bingeGroup = "cloud:${match.item.providerId}:${match.item.id}",
+                                countryWhitelist = null,
+                                proxyHeaders = null,
+                                videoSize = result.videoSizeBytes ?: match.file.sizeBytes,
+                                filename = result.filename ?: match.file.name
+                            ),
+                            addonName = "${match.item.providerName} Cloud",
+                            addonLogo = null,
+                            debridCacheStatus = StreamDebridCacheStatus(
+                                providerId = match.item.providerId,
+                                providerName = match.item.providerName,
+                                state = StreamDebridCacheState.CACHED,
+                                cachedName = match.file.name,
+                                cachedSize = match.file.sizeBytes
+                            )
+                        )
+                        else -> null
+                    }
+                }
+            }.awaitAll().filterNotNull()
+        }
+    }
+
+    private companion object {
+        const val MAX_CLOUD_STREAM_MATCHES = 30
     }
 }

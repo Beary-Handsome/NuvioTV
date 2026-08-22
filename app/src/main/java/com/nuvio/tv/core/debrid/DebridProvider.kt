@@ -71,7 +71,8 @@ object DebridProviders {
         capabilities = setOf(
             DebridProviderCapability.ClientResolve,
             DebridProviderCapability.LocalTorrentCacheCheck,
-            DebridProviderCapability.LocalTorrentResolve
+            DebridProviderCapability.LocalTorrentResolve,
+            DebridProviderCapability.CloudLibrary
         )
     )
 

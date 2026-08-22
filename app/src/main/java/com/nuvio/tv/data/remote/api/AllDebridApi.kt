@@ -4,6 +4,8 @@ import com.nuvio.tv.data.remote.dto.AllDebridEnvelopeDto
 import com.nuvio.tv.data.remote.dto.AllDebridInstantDto
 import com.nuvio.tv.data.remote.dto.AllDebridMagnetUploadDto
 import com.nuvio.tv.data.remote.dto.AllDebridMagnetStatusDto
+import com.nuvio.tv.data.remote.dto.AllDebridMagnetListDto
+import com.nuvio.tv.data.remote.dto.AllDebridMagnetFilesDto
 import com.nuvio.tv.data.remote.dto.AllDebridUnlockDto
 import retrofit2.Response
 import retrofit2.http.*
@@ -17,6 +19,21 @@ import retrofit2.http.*
  * API docs: https://docs.alldebrid.com/
  */
 interface AllDebridApi {
+
+    @GET("magnet/status")
+    suspend fun listMagnets(
+        @Query("agent") agent: String = "nuvio",
+        @Query("apikey") apiKey: String,
+        @Query("status") status: String = "ready"
+    ): Response<AllDebridEnvelopeDto<AllDebridMagnetListDto>>
+
+    @POST("https://api.alldebrid.com/v4/magnet/files")
+    @FormUrlEncoded
+    suspend fun magnetFiles(
+        @Query("agent") agent: String = "nuvio",
+        @Query("apikey") apiKey: String,
+        @Field("id[]") magnetIds: List<String>
+    ): Response<AllDebridEnvelopeDto<AllDebridMagnetFilesDto>>
 
     @GET("user")
     suspend fun getUser(

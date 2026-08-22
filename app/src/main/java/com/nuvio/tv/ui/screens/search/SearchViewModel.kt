@@ -242,6 +242,9 @@ class SearchViewModel @Inject constructor(
             is SearchEvent.SelectDiscoverType -> selectDiscoverType(event.type)
             is SearchEvent.SelectDiscoverCatalog -> selectDiscoverCatalog(event.catalogKey)
             is SearchEvent.SelectDiscoverGenre -> selectDiscoverGenre(event.genre)
+            is SearchEvent.SelectDiscoverYear -> selectDiscoverYear(event.year)
+            is SearchEvent.SelectDiscoverMinimumRating -> selectDiscoverMinimumRating(event.rating)
+            is SearchEvent.SelectDiscoverLanguage -> selectDiscoverLanguage(event.language)
             SearchEvent.LoadNextDiscoverResults -> loadNextDiscoverResults()
             SearchEvent.Retry -> {
                 // An explicit retry must refetch even though nothing about the request changed.
@@ -901,6 +904,39 @@ class SearchViewModel @Inject constructor(
         fetchDiscoverContent(reset = true)
     }
 
+    private fun selectDiscoverYear(year: Int?) {
+        _uiState.update {
+            it.copy(
+                selectedDiscoverYear = year,
+                discoverResults = emptyList(),
+                pendingDiscoverResults = emptyList()
+            )
+        }
+        fetchDiscoverContent(reset = true)
+    }
+
+    private fun selectDiscoverMinimumRating(rating: Float?) {
+        _uiState.update {
+            it.copy(
+                selectedDiscoverMinimumRating = rating,
+                discoverResults = emptyList(),
+                pendingDiscoverResults = emptyList()
+            )
+        }
+        fetchDiscoverContent(reset = true)
+    }
+
+    private fun selectDiscoverLanguage(language: String?) {
+        _uiState.update {
+            it.copy(
+                selectedDiscoverLanguage = language,
+                discoverResults = emptyList(),
+                pendingDiscoverResults = emptyList()
+            )
+        }
+        fetchDiscoverContent(reset = true)
+    }
+
     private fun loadNextDiscoverResults() {
         if (_uiState.value.pendingDiscoverResults.isNotEmpty()) {
             showMoreDiscoverResults()
@@ -998,11 +1034,22 @@ class SearchViewModel @Inject constructor(
                         } else {
                             rawDeduped
                         }
+                        val yearFiltered = state.selectedDiscoverYear?.let { selectedYear ->
+                            genreFiltered.filter { item -> item.discoverYear() == selectedYear }
+                        } ?: genreFiltered
+                        val ratingFiltered = state.selectedDiscoverMinimumRating?.let { minimum ->
+                            yearFiltered.filter { item -> (item.imdbRating ?: 0f) >= minimum }
+                        } ?: yearFiltered
+                        val languageFiltered = state.selectedDiscoverLanguage?.let { selectedLanguage ->
+                            ratingFiltered.filter { item ->
+                                item.language?.equals(selectedLanguage, ignoreCase = true) == true
+                            }
+                        } ?: ratingFiltered
                         val deduped = if (hideUnreleasedContent) {
                             val today = LocalDate.now()
-                            genreFiltered.filterNot { it.isUnreleased(today) }
+                            languageFiltered.filterNot { it.isUnreleased(today) }
                         } else {
-                            genreFiltered
+                            languageFiltered
                         }
                         val shouldRevealBatch = !reset && revealBatchAfterNextDiscoverFetch
                         val visibleLimit = if (reset) {
@@ -1043,6 +1090,12 @@ class SearchViewModel @Inject constructor(
             }
         }
     }
+
+    private fun MetaPreview.discoverYear(): Int? =
+        sequenceOf(released, releaseInfo)
+            .filterNotNull()
+            .mapNotNull { value -> Regex("\\b(?:19|20)\\d{2}\\b").find(value)?.value?.toIntOrNull() }
+            .firstOrNull()
 
     private fun pickDiscoverCatalog(
         catalogs: List<DiscoverCatalog>,

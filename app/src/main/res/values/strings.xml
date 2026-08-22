@@ -1798,6 +1798,8 @@
     <string name="library_filter_sort">Sort</string>
     <string name="library_filter_genre">Genre</string>
     <string name="library_filter_year">Year</string>
+    <string name="library_filter_rating">Minimum rating</string>
+    <string name="library_filter_language">Language</string>
     <string name="library_filter_watched">Watched</string>
     <string name="library_watched_filter_all">All</string>
     <string name="library_watched_filter_watched">Watched</string>
@@ -2133,6 +2135,10 @@
     <string name="discover_filter_type">Type</string>
     <string name="discover_filter_catalog">Catalog</string>
     <string name="discover_filter_genre">Genre</string>
+    <string name="discover_filter_year">Year</string>
+    <string name="discover_filter_rating">Minimum rating</string>
+    <string name="discover_filter_language">Language</string>
+    <string name="discover_filter_any">Any</string>
     <string name="discover_select_catalog">Select</string>
     <string name="discover_genre_default">Default</string>
     <string name="discover_empty_no_catalog_title">Select a catalog</string>

@@ -65,7 +65,7 @@ class EasynewsDirectDebridResolver @Inject constructor(
                 "$username:$password".toByteArray(), Base64.NO_WRAP
             )
             val query = buildQuery(title, season, episode, year)
-            val titleRegex = buildTitleRegex(title)
+            val titleRegex = easynewsTitleRegex(title)
 
             val response = easynewsApi.search(auth = auth, query = query)
             if (!response.isSuccessful) {
@@ -130,15 +130,6 @@ class EasynewsDirectDebridResolver @Inject constructor(
         return parts.joinToString(" ")
     }
 
-    private fun buildTitleRegex(title: String): Regex {
-        val cleaned = title
-            .replace("'", "").replace("'", "")
-            .replace(TITLE_CLEANUP_RE, " ")
-            .trim()
-        val pattern = Regex.escape(cleaned.lowercase()).replace("\\ ", "[\\s._\\-]+")
-        return Regex("^(\\[[^]]+][\\s._\\-]*|\\([^)]+\\)[\\s._\\-]*)?$pattern([\\s._\\-]|\$)", RegexOption.IGNORE_CASE)
-    }
-
     private fun matchesEpisode(filename: String, season: Int?, episode: Int?): Boolean {
         if (season == null || episode == null) return true
         val s = season.toString().padStart(2, '0')
@@ -163,4 +154,18 @@ class EasynewsDirectDebridResolver @Inject constructor(
         score += (result.sizeBytes / (200 * 1024 * 1024)).toInt() // +1 per 200MB
         return score
     }
+}
+
+internal fun easynewsTitleRegex(title: String): Regex {
+    val tokens = title.lowercase()
+        .replace("'", "")
+        .replace("'", "")
+        .split(Regex("[^a-z0-9]+"))
+        .filter { it.isNotBlank() }
+    if (tokens.isEmpty()) return Regex("a^")
+    val pattern = tokens.joinToString("[^a-z0-9]+") { Regex.escape(it) }
+    return Regex(
+        "^(?:\\[[^]]+][^a-z0-9]*|\\([^)]+\\)[^a-z0-9]*)?$pattern(?:[^a-z0-9]|\$)",
+        RegexOption.IGNORE_CASE
+    )
 }

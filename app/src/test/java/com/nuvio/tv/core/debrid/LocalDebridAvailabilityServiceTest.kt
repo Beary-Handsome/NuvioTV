@@ -66,16 +66,35 @@ class LocalDebridAvailabilityServiceTest {
         assertEquals(DebridProviders.TORBOX_ID, status?.providerId)
     }
 
-    private fun service(
-        localDebridService: LocalDebridService = mockk(relaxed = true)
-    ): LocalDebridAvailabilityService {
-        val dataStore = mockk<DebridSettingsDataStore>()
-        every { dataStore.settings } returns flowOf(
-            DebridSettings(
+    @Test
+    fun `one provider miss cannot hide candidate when another provider is inconclusive`() = runTest {
+        val localDebridService = mockk<LocalDebridService>()
+        coEvery {
+            localDebridService.checkCached(match { it.provider.id == DebridProviders.TORBOX_ID }, any())
+        } returns emptyMap()
+        coEvery {
+            localDebridService.checkCached(match { it.provider.id == DebridProviders.REAL_DEBRID_ID }, any())
+        } returns null
+        val service = service(
+            localDebridService = localDebridService,
+            settings = DebridSettings(
                 enabled = true,
-                torboxApiKey = "tb_token"
+                torboxApiKey = "tb_token",
+                realDebridApiKey = "rd_token"
             )
         )
+
+        val result = service.annotateCachedAvailability(listOf(group(listOf(stream(infoHash = "ABC123")))))
+
+        assertEquals(StreamDebridCacheState.UNKNOWN, result.single().streams.single().debridCacheStatus?.state)
+    }
+
+    private fun service(
+        localDebridService: LocalDebridService = mockk(relaxed = true),
+        settings: DebridSettings = DebridSettings(enabled = true, torboxApiKey = "tb_token")
+    ): LocalDebridAvailabilityService {
+        val dataStore = mockk<DebridSettingsDataStore>()
+        every { dataStore.settings } returns flowOf(settings)
         return LocalDebridAvailabilityService(
             dataStore,
             localDebridService,

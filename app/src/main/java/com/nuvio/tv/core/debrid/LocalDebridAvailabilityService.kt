@@ -81,11 +81,10 @@ class LocalDebridAvailabilityService @Inject constructor(
             }.map { it.await() }
         }
 
-        // If NO provider returned a definitive answer, the whole check was
-        // inconclusive (network timeout, rate-limit, empty response). In that
-        // case streams are marked UNKNOWN (below) rather than NOT_CACHED, so a
-        // transient failure can't permanently disable auto-play for them.
-        val anyProviderAnswered = allResults.any { (_, cached) -> cached != null }
+        // A definitive global miss requires every configured provider to
+        // answer. A timeout, disabled endpoint, or rate limit on even one
+        // provider keeps the candidate UNKNOWN and eligible for resolution.
+        val allProvidersAnswered = allResults.all { (_, cached) -> cached != null }
 
         // Merge results: prefer the user's preferred provider, fall back to any that has it
         val preferredId = settings.activeResolverProviderId
@@ -112,9 +111,8 @@ class LocalDebridAvailabilityService @Inject constructor(
             val hit = mergedCache[hash]
             val resolvedState = when {
                 hit != null -> StreamDebridCacheState.CACHED
-                // Only a definitive negative from a provider that actually
-                // answered counts as NOT_CACHED; an all-failed check is UNKNOWN.
-                anyProviderAnswered -> StreamDebridCacheState.NOT_CACHED
+                // Only unanimous, definitive negatives count as NOT_CACHED.
+                allProvidersAnswered -> StreamDebridCacheState.NOT_CACHED
                 else -> StreamDebridCacheState.UNKNOWN
             }
             stream.copy(
@@ -133,11 +131,13 @@ class LocalDebridAvailabilityService @Inject constructor(
         val accounts = cacheCheckAccounts()
         if (accounts.isEmpty()) return null
         // Check all providers — cached on ANY means cached
+        var allProvidersAnswered = true
         for (account in accounts) {
             val result = localDebridService.isCached(account, hash)
             if (result == true) return true
+            if (result == null) allProvidersAnswered = false
         }
-        return false
+        return false.takeIf { allProvidersAnswered }
     }
 
     private suspend fun cacheCheckAccounts(): List<DebridServiceCredential> {

@@ -203,7 +203,7 @@ class StreamAutoPlaySelectorTest {
     }
 
     @Test
-    fun `first stream skips checking and not cached local debrid streams`() {
+    fun `first stream skips definitive misses but can try inconclusive local debrid streams`() {
         val checking = stream(
             addonName = "AddonA",
             name = "Checking",
@@ -239,7 +239,7 @@ class StreamAutoPlaySelectorTest {
             selectedPlugins = emptySet()
         )
 
-        assertEquals(cached, selected)
+        assertEquals(unknown, selected)
     }
 
     @Test

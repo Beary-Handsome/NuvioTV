@@ -132,22 +132,22 @@ class LocalDebridService @Inject constructor(
                 try {
                     val hashPath = batch.joinToString("/")
                     val response = realDebridApi.instantAvailability(authorization, hashPath)
-                    if (response.isSuccessful) {
-                        val body = response.body()?.string() ?: "{}"
-                        try {
-                            val json = org.json.JSONObject(body)
-                            for (hash in batch) {
-                                val hashData = json.optJSONObject(hash) ?: json.optJSONObject(hash.uppercase())
-                                if (hashData != null && hashData.has("rd")) {
-                                    result[hash] = LocalDebridCachedItem(name = null, size = null)
-                                }
+                    if (!response.isSuccessful) return null
+                    val body = response.body()?.string() ?: return null
+                    try {
+                        val json = org.json.JSONObject(body)
+                        for (hash in batch) {
+                            val hashData = json.optJSONObject(hash) ?: json.optJSONObject(hash.uppercase())
+                            if (hashData != null && hashData.has("rd")) {
+                                result[hash] = LocalDebridCachedItem(name = null, size = null)
                             }
-                        } catch (_: Exception) {
-                            // JSON parse failure — skip this batch
                         }
+                    } catch (_: Exception) {
+                        return null
                     }
                 } catch (e: Exception) {
                     if (e is CancellationException) throw e
+                    return null
                 }
             }
             result

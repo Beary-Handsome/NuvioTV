@@ -44,8 +44,8 @@ object StreamAutoPlaySelector {
         // External URL streams (e.g. error pages, web links) are not playable.
         if (stream.isExternal()) return false
         when (stream.debridCacheStatus?.state) {
-            StreamDebridCacheState.NOT_CACHED,
-            StreamDebridCacheState.UNKNOWN -> return false
+            StreamDebridCacheState.NOT_CACHED -> return false
+            StreamDebridCacheState.UNKNOWN -> Unit
             StreamDebridCacheState.CHECKING -> {
                 // Don't block auto-play for streams that are already resolvable
                 // without the cache check result (direct URL or direct debrid).

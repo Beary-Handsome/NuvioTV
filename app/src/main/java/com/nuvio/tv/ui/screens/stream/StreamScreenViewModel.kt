@@ -612,12 +612,15 @@ class StreamScreenViewModel @Inject constructor(
             var timeoutElapsed = false
             var debridPreparationLaunched = false
             var cloudStreamGroups: List<AddonStreams> = emptyList()
+            var easyNewsStreamGroups: List<AddonStreams> = emptyList()
             val isUnlimitedTimeout = playerSettings.streamAutoPlayTimeoutSeconds == PlayerSettings.STREAM_AUTOPLAY_TIMEOUT_UNLIMITED
 
-            fun withCloudStreams(groups: List<AddonStreams>): List<AddonStreams> {
-                if (cloudStreamGroups.isEmpty()) return groups
-                val cloudNames = cloudStreamGroups.mapTo(hashSetOf()) { it.addonName }
-                return cloudStreamGroups + groups.filterNot { it.addonName in cloudNames }
+            fun withSupplementalStreams(groups: List<AddonStreams>): List<AddonStreams> {
+                val supplemental = cloudStreamGroups + easyNewsStreamGroups
+                if (supplemental.isEmpty()) return groups
+                val supplementalNames = supplemental
+                    .mapTo(hashSetOf()) { it.addonName.lowercase() }
+                return supplemental + groups.filterNot { it.addonName.lowercase() in supplementalNames }
             }
 
             fun launchDirectDebridPreparationIfNeeded(streamGroups: List<AddonStreams>) {
@@ -672,7 +675,7 @@ class StreamScreenViewModel @Inject constructor(
                 ).collect { result ->
                     when (result) {
                         is NetworkResult.Success -> {
-                            val mergedResult = withCloudStreams(result.data)
+                            val mergedResult = withSupplementalStreams(result.data)
                             lastSuccessData = mergedResult
                             applySuccess(mergedResult, isAllLoaded = false)
                             launchDirectDebridPreparationIfNeeded(mergedResult)
@@ -807,7 +810,7 @@ class StreamScreenViewModel @Inject constructor(
                         AddonStreams(addonName = addonName, addonLogo = null, streams = streams)
                     }
                 if (cloudStreamGroups.isNotEmpty()) {
-                    val merged = withCloudStreams(lastSuccessData.orEmpty())
+                    val merged = withSupplementalStreams(lastSuccessData.orEmpty())
                     lastSuccessData = merged
                     applySuccess(merged, isAllLoaded = timeoutElapsed)
                 }
@@ -821,13 +824,14 @@ class StreamScreenViewModel @Inject constructor(
                     year = year?.take(4)?.toIntOrNull()
                 )
                 if (easyNewsStreams.isEmpty()) return@launch
-                val easyNewsGroup = AddonStreams(
-                    addonName = "EasyNews",
-                    addonLogo = null,
-                    streams = easyNewsStreams
+                easyNewsStreamGroups = listOf(
+                    AddonStreams(
+                        addonName = "EasyNews",
+                        addonLogo = null,
+                        streams = easyNewsStreams
+                    )
                 )
-                val merged = lastSuccessData.orEmpty()
-                    .filterNot { it.addonName.equals("EasyNews", ignoreCase = true) } + easyNewsGroup
+                val merged = withSupplementalStreams(lastSuccessData.orEmpty())
                 lastSuccessData = merged
                 applySuccess(merged, isAllLoaded = timeoutElapsed)
             }

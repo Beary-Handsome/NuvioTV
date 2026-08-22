@@ -610,7 +610,7 @@ class StreamScreenViewModel @Inject constructor(
             var lastSuccessData: List<AddonStreams>? = null
             var autoSelectTriggered = false
             var timeoutElapsed = false
-            var debridPreparationLaunched = false
+            var debridPreparationJob: Job? = null
             var cloudStreamGroups: List<AddonStreams> = emptyList()
             var easyNewsStreamGroups: List<AddonStreams> = emptyList()
             val isUnlimitedTimeout = playerSettings.streamAutoPlayTimeoutSeconds == PlayerSettings.STREAM_AUTOPLAY_TIMEOUT_UNLIMITED
@@ -624,11 +624,13 @@ class StreamScreenViewModel @Inject constructor(
             }
 
             fun launchDirectDebridPreparationIfNeeded(streamGroups: List<AddonStreams>) {
-                if (debridPreparationLaunched || streamGroups.none { group -> group.streams.any { it.isReadyForDebridPreparation() } }) {
+                if (
+                    debridPreparationJob?.isActive == true ||
+                    streamGroups.none { group -> group.streams.any { it.isReadyForDebridPreparation() } }
+                ) {
                     return
                 }
-                debridPreparationLaunched = true
-                viewModelScope.launch {
+                debridPreparationJob = viewModelScope.launch {
                     directDebridStreamPreparer.prepare(
                         streams = _uiState.value.allStreams,
                         season = season,

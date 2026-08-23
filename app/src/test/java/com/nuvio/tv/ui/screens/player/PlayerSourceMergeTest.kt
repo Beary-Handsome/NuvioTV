@@ -25,6 +25,21 @@ class PlayerSourceMergeTest {
         assertEquals(listOf("Riven", "EasyNews"), merged.map { it.addonName })
     }
 
+    @Test
+    fun `refresh replaces duplicate without moving its stable position`() {
+        val oldEasynews = stream("EasyNews", "https://easynews.test/file")
+        val riven = stream("Riven", "https://riven.test/file")
+        val refreshedEasynews = oldEasynews.copy(title = "refreshed")
+
+        val merged = mergeSourceStreams(
+            cached = listOf(oldEasynews, riven),
+            fresh = listOf(refreshedEasynews)
+        )
+
+        assertEquals(listOf("EasyNews", "Riven"), merged.map { it.addonName })
+        assertEquals("refreshed", merged.first().title)
+    }
+
     private fun stream(addon: String, url: String) = Stream(
         name = addon,
         title = null,

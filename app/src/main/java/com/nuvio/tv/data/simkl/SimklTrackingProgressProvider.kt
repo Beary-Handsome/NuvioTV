@@ -114,6 +114,8 @@ class SimklTrackingProgressProvider @Inject constructor(
 
     override fun clearOptimistic() = Unit
 
+    override fun retainsLocalProgress(contentId: String): Boolean = true
+
     override fun isHiddenFromProgress(contentId: String): Boolean =
         syncRepository.projection.value.isHidden(contentId)
 

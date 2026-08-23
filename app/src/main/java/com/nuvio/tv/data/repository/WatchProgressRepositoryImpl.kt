@@ -675,6 +675,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
         val profileId = profileManager.activeProfileId.value
         activeProgressProvider()?.applyOptimisticProgress(progress, quiet = !syncRemote)
         watchProgressPreferences.saveProgress(progress, profileId = profileId)
+        optimisticContinueWatchingUpdates.tryEmit(progress)
 
         if (syncRemote && authManager.isAuthenticated) {
             syncScope.launch(NonCancellable) {
@@ -691,9 +692,6 @@ class WatchProgressRepositoryImpl @Inject constructor(
             if (syncRemote && authManager.isAuthenticated) {
                 triggerWatchedItemsSync(listOf(watchedItem), profileId = profileId)
             }
-            // Emit optimistic continue-watching update so the next episode
-            // appears on the home screen without requiring manual playback.
-            optimisticContinueWatchingUpdates.tryEmit(progress)
         }
     }
 

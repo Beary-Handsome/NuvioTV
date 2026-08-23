@@ -640,7 +640,7 @@ class PlaybackIssueReportRepository @Inject constructor(
 
     private fun String?.cleanText(maxLength: Int): String? =
         this?.trim()
-            ?.redactSensitiveText()
+            ?.let(::redactPlaybackDiagnosticText)
             ?.replace(Regex("\\s+"), " ")
             ?.takeIf { it.isNotBlank() }
             ?.limit(maxLength)
@@ -649,18 +649,19 @@ class PlaybackIssueReportRepository @Inject constructor(
         replace('\n', ' ')
             .replace('\r', ' ')
             .trim()
+            .let(::redactPlaybackDiagnosticText)
             .takeIf { it.isNotBlank() }
             ?.limit(maxLength)
-
-    private fun String.redactSensitiveText(): String =
-        replace(Regex("""https?://\S+""", RegexOption.IGNORE_CASE), "[redacted-url]")
-            .replace(
-                Regex("""(?i)\b(authorization|proxy-authorization|cookie|set-cookie)\b\s*:\s*[^\r\n]+"""),
-                "$1: [redacted]"
-            )
-            .replace(Regex("""(?i)\b(bearer|token|apikey|api_key)\b\s*[:=]\s*\S+"""), "$1=[redacted]")
-            .replace(Regex("""(?i)\b(authorization|proxy-authorization|cookie|set-cookie)\b\s*=\s*\S+"""), "$1=[redacted]")
 
     private fun String.limit(maxLength: Int): String =
         if (length <= maxLength) this else take(maxLength)
 }
+
+internal fun redactPlaybackDiagnosticText(value: String): String =
+    value.replace(Regex("""https?://\S+""", RegexOption.IGNORE_CASE), "[redacted-url]")
+        .replace(
+            Regex("""(?i)\b(authorization|proxy-authorization|cookie|set-cookie)\b\s*:\s*[^\r\n]+"""),
+            "$1: [redacted]"
+        )
+        .replace(Regex("""(?i)\b(bearer|token|apikey|api_key)\b\s*[:=]\s*\S+"""), "$1=[redacted]")
+        .replace(Regex("""(?i)\b(authorization|proxy-authorization|cookie|set-cookie)\b\s*=\s*\S+"""), "$1=[redacted]")

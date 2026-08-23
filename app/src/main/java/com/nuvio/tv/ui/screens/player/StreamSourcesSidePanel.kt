@@ -161,7 +161,7 @@ internal fun StreamSourcesSidePanel(
             Spacer(modifier = Modifier.height(NuvioTheme.spacing.lg))
 
             when {
-                uiState.isLoadingSourceStreams -> {
+                uiState.isLoadingSourceStreams && uiState.sourceFilteredStreams.isEmpty() -> {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -172,7 +172,7 @@ internal fun StreamSourcesSidePanel(
                     }
                 }
 
-                uiState.sourceStreamsError != null -> {
+                uiState.sourceStreamsError != null && uiState.sourceFilteredStreams.isEmpty() -> {
                     Text(
                         text = uiState.sourceStreamsError ?: stringResource(R.string.panel_failed_load_streams),
                         style = MaterialTheme.typography.bodyLarge,

@@ -1,6 +1,7 @@
 package com.nuvio.tv.ui.screens.player
 
 import android.content.Intent
+import com.nuvio.tv.R
 import android.net.Uri
 import android.util.Log
 import androidx.media3.common.util.UnstableApi
@@ -195,16 +196,16 @@ internal fun PlayerRuntimeController.loadSourceStreams(forceRefresh: Boolean) {
     sourceStreamsJob = newScope.launch {
         sourceStreamsCacheRequestKey = requestKey
         sourceStreamsFetchCompleted = false
-        if (forceRefresh || targetChanged) sourceBadgedAddonNames = emptySet()
+        if (targetChanged) sourceBadgedAddonNames = emptySet()
         _uiState.update {
             it.copy(
                 isLoadingSourceStreams = true,
                 sourceStreamsError = null,
-                sourceAllStreams = if (forceRefresh || targetChanged) emptyList() else it.sourceAllStreams,
-                sourceSelectedAddonFilter = if (forceRefresh || targetChanged) null else it.sourceSelectedAddonFilter,
-                sourceFilteredStreams = if (forceRefresh || targetChanged) emptyList() else it.sourceFilteredStreams,
-                sourceAvailableAddons = if (forceRefresh || targetChanged) emptyList() else it.sourceAvailableAddons,
-                sourceChips = if (forceRefresh || targetChanged) emptyList() else it.sourceChips
+                sourceAllStreams = if (targetChanged) emptyList() else it.sourceAllStreams,
+                sourceSelectedAddonFilter = if (targetChanged) null else it.sourceSelectedAddonFilter,
+                sourceFilteredStreams = if (targetChanged) emptyList() else it.sourceFilteredStreams,
+                sourceAvailableAddons = if (targetChanged) emptyList() else it.sourceAvailableAddons,
+                sourceChips = if (targetChanged) emptyList() else it.sourceChips
             )
         }
 
@@ -266,7 +267,7 @@ internal fun PlayerRuntimeController.loadSourceStreams(forceRefresh: Boolean) {
                     val availableAddons = (addonStreams.map { it.addonName } + supplementalStreams.map { it.addonName }).distinct()
                     _uiState.update {
                         // On resume, merge fresh results with any previously cached streams
-                        val mergedAllStreams = if (isResume && it.sourceAllStreams.isNotEmpty()) {
+                        val mergedAllStreams = if (!targetChanged && it.sourceAllStreams.isNotEmpty()) {
                             mergeSourceStreams(it.sourceAllStreams, allStreams)
                         } else {
                             allStreams
@@ -283,7 +284,7 @@ internal fun PlayerRuntimeController.loadSourceStreams(forceRefresh: Boolean) {
                                 if (existing != null && s.badges.isEmpty()) s.copy(badges = existing.badges) else s
                             }
                         }
-                        val mergedAvailableAddons = if (isResume && it.sourceAvailableAddons.isNotEmpty()) {
+                        val mergedAvailableAddons = if (!targetChanged && it.sourceAvailableAddons.isNotEmpty()) {
                             (it.sourceAvailableAddons + availableAddons).distinct()
                         } else {
                             availableAddons
@@ -323,7 +324,7 @@ internal fun PlayerRuntimeController.loadSourceStreams(forceRefresh: Boolean) {
                     _uiState.update {
                         it.copy(
                             isLoadingSourceStreams = false,
-                            sourceStreamsError = result.message
+                            sourceStreamsError = context.getString(R.string.panel_failed_load_streams)
                         )
                     }
                 }

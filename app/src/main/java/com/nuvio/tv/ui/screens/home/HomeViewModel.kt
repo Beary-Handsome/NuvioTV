@@ -325,6 +325,7 @@ class HomeViewModel @Inject constructor(
             observeMdbListSettings()
             observeBlurUnwatchedEpisodes()
             observeProgressSourceChanges()
+            observeOptimisticContinueWatchingUpdates()
             observeCollections()
             observeInstalledAddons()
             observeTraktRecommendations()
@@ -696,6 +697,18 @@ class HomeViewModel @Inject constructor(
             }
         }
         loadContinueWatchingPipeline()
+    }
+
+    private fun observeOptimisticContinueWatchingUpdates() {
+        viewModelScope.launch {
+            watchProgressRepository.observeOptimisticContinueWatchingUpdates().collect {
+                cwPipelineRefreshTrigger.value++
+            }
+        }
+    }
+
+    fun refreshContinueWatching() {
+        cwPipelineRefreshTrigger.value++
     }
 
     private fun removeContinueWatching(

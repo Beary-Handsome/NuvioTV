@@ -218,6 +218,7 @@ internal fun PlayerRuntimeController.pauseForLifecycle() {
 
     if (isUsingMpvEngine()) {
         mpvView?.setPaused(true)
+        saveWatchProgress()
         emitPauseScrobbleForCurrentProgress()
         stopWatchProgressSaving()
         stopProgressUpdates()

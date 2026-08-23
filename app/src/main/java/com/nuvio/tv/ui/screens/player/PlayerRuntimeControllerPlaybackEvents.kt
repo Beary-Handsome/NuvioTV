@@ -23,6 +23,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 
 internal const val AUDIO_AMPLIFICATION_MIN_DB = 0
 internal const val AUDIO_AMPLIFICATION_MAX_DB = 10
@@ -31,7 +32,8 @@ internal const val CENTER_MIX_LEVEL_MAX_DB = 30
 internal const val AUDIO_DELAY_MIN_MS = -3000
 internal const val AUDIO_DELAY_MAX_MS = 3000
 internal const val AUDIO_DELAY_STEP_MS = 25
-internal const val WATCH_PROGRESS_SAVE_INTERVAL_MS = 90_000L
+internal const val WATCH_PROGRESS_INITIAL_SAVE_DELAY_MS = 5_000L
+internal const val WATCH_PROGRESS_SAVE_INTERVAL_MS = 20_000L
 
 internal fun PlayerRuntimeController.applyAudioDelay(
     delayMs: Int,
@@ -353,6 +355,8 @@ internal fun PlayerRuntimeController.stopProgressUpdates() {
 internal fun PlayerRuntimeController.startWatchProgressSaving() {
     watchProgressSaveJob?.cancel()
     watchProgressSaveJob = scope.launch {
+        delay(WATCH_PROGRESS_INITIAL_SAVE_DELAY_MS)
+        saveWatchProgressIfNeeded()
         while (isActive) {
             delay(WATCH_PROGRESS_SAVE_INTERVAL_MS)
             saveWatchProgressIfNeeded()
@@ -705,21 +709,36 @@ internal fun PlayerRuntimeController.saveWatchProgressInternal(position: Long, d
             videoId = progress.videoId
         )
         val normalizedProgress = progress.copy(contentId = effectiveContentId)
-        if (normalizedProgress.isCompleted()) {
-            if (!hasMarkedCurrentEpisodeCompleted) {
-                hasMarkedCurrentEpisodeCompleted = true
-                watchProgressRepository.markAsCompleted(
-                    normalizedProgress,
-                    broadcastTrackingHistory = false
+        watchProgressWriteMutex.withLock {
+            if (!shouldPersistProgressSnapshot(
+                    candidateTimestampMs = normalizedProgress.lastWatched,
+                    latestPersistedTimestampMs = latestPersistedProgressTimestampMs
                 )
+            ) {
+                return@withLock
             }
-            runCatching { tvRecommendationManager.onProgressRemoved(normalizedProgress.contentId) }
-        } else {
-            watchProgressRepository.saveProgress(normalizedProgress, syncRemote = syncRemote)
-            runCatching { tvRecommendationManager.updateSingleWatchNextProgram(normalizedProgress) }
+            if (normalizedProgress.isCompleted()) {
+                if (!hasMarkedCurrentEpisodeCompleted) {
+                    hasMarkedCurrentEpisodeCompleted = true
+                    watchProgressRepository.markAsCompleted(
+                        normalizedProgress,
+                        broadcastTrackingHistory = false
+                    )
+                }
+                runCatching { tvRecommendationManager.onProgressRemoved(normalizedProgress.contentId) }
+            } else {
+                watchProgressRepository.saveProgress(normalizedProgress, syncRemote = syncRemote)
+                runCatching { tvRecommendationManager.updateSingleWatchNextProgram(normalizedProgress) }
+            }
+            latestPersistedProgressTimestampMs = normalizedProgress.lastWatched
         }
     }
 }
+
+internal fun shouldPersistProgressSnapshot(
+    candidateTimestampMs: Long,
+    latestPersistedTimestampMs: Long
+): Boolean = candidateTimestampMs > latestPersistedTimestampMs
 
 private fun PlayerRuntimeController.saveCloudLibraryProgress(
     position: Long,
@@ -1130,6 +1149,7 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
                     setPlaybackPaused(true)
                     stopProgressUpdates()
                     stopWatchProgressSaving()
+                    saveWatchProgress()
                     emitPauseScrobbleForCurrentProgress()
                     schedulePauseOverlay()
                 } else {

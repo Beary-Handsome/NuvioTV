@@ -373,7 +373,7 @@ internal fun PlayerRuntimeController.showStreamSourceIndicator(stream: Stream) {
     _uiState.update {
         it.copy(
             showStreamSourceIndicator = true,
-            streamSourceIndicatorText = "Source: $chosenSource"
+            streamSourceIndicatorText = context.getString(R.string.player_source_indicator, chosenSource)
         )
     }
     hideStreamSourceIndicatorJob = scope.launch {

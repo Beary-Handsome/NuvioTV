@@ -60,6 +60,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 import java.lang.ref.WeakReference
 import java.util.concurrent.atomic.AtomicLong
 
@@ -348,6 +349,8 @@ class PlayerRuntimeController(
 
     internal var lastSavedPosition: Long = 0L
     internal val saveThresholdMs = 5000L
+    internal val watchProgressWriteMutex = Mutex()
+    internal var latestPersistedProgressTimestampMs: Long = 0L
     internal var hasMarkedCurrentEpisodeCompleted: Boolean = false
     internal var lastKnownDuration: Long = 0L
 

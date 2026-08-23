@@ -1742,6 +1742,7 @@
     <string name="subtitle_style_off">Off</string>
     <string name="subtitle_style_weight">Weight</string>
     <string name="panel_failed_load_streams">Failed to load streams</string>
+    <string name="player_source_indicator">Source: %1$s</string>
     <string name="panel_failed_load_episodes">Failed to load episodes</string>
 
     <string name="pause_you_are_watching">You\'re watching</string>

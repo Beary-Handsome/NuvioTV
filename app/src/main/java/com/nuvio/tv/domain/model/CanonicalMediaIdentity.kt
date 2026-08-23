@@ -10,9 +10,16 @@ data class CanonicalMediaIdentity(
     val episode: Int? = null
 ) {
     val contentKey: String = "$type|$contentId"
+    val streamRequestId: String = if (
+        type == "series" && contentId.isNotBlank() && season != null && episode != null
+    ) {
+        "$contentId:$season:$episode"
+    } else {
+        videoId
+    }
     val videoKey: String = listOf(
         contentKey,
-        videoId,
+        streamRequestId,
         season?.toString().orEmpty(),
         episode?.toString().orEmpty()
     ).joinToString("|")

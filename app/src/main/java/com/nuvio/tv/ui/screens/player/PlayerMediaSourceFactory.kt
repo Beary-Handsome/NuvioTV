@@ -90,6 +90,7 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         mediaMetadata: androidx.media3.common.MediaMetadata? = null
     ): MediaSource {
         val sanitizedHeaders = sanitizeHeaders(headers)
+        val authenticatedRequest = !allowsRangeOptimizations(sanitizedHeaders)
         val httpDataSourceFactory = PlayerPlaybackNetworking.createDataSourceFactory(context, sanitizedHeaders)
 
         val resolvedMimeType = mimeTypeOverride ?: inferMimeType(
@@ -113,8 +114,9 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
 
         // 1. Parallel connections (opt-in). ParallelRangeDataSource needs a concrete
         // OkHttpDataSource.Factory, so build one only on this path.
-        parallelStartupPrefetchUnlocked.set(!(useParallelConnections && !isHls && !isDash))
-        val progressiveUpstreamFactory: DataSource.Factory = if (useParallelConnections && !isHls && !isDash) {
+        val useParallelRanges = useParallelConnections && !authenticatedRequest && !isHls && !isDash
+        parallelStartupPrefetchUnlocked.set(!useParallelRanges)
+        val progressiveUpstreamFactory: DataSource.Factory = if (useParallelRanges) {
             val okHttpFactory = OkHttpDataSource.Factory(playbackHttpClient).apply {
                 setDefaultRequestProperties(sanitizedHeaders)
                 setUserAgent(DEFAULT_USER_AGENT)
@@ -132,7 +134,8 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         }
 
         // 2. VOD disk cache (opt-in).
-        val useVodCache = ENABLE_VOD_CACHE && vodCacheEnabled && !isHls && !isDash && shouldUseVodCache(url)
+        val useVodCache = ENABLE_VOD_CACHE && vodCacheEnabled && !authenticatedRequest &&
+            !isHls && !isDash && shouldUseVodCache(url)
         val previousVodCacheActive = currentVodCacheActive
         currentVodCacheUrl = url
         currentVodCacheResolvedUrl = null
@@ -307,6 +310,9 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
             }
             return sanitized
         }
+
+        internal fun allowsRangeOptimizations(headers: Map<String, String>): Boolean =
+            headers.keys.none { it.equals("Authorization", ignoreCase = true) }
 
         fun normalizePlaybackRequest(
             url: String,

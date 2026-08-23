@@ -34,7 +34,6 @@ import kotlinx.coroutines.withTimeoutOrNull
 private const val NEXT_EPISODE_HARD_TIMEOUT_MS = 120_000L
 private const val CLOUD_LIBRARY_AUTO_NEXT_TIMEOUT_MS = 65_000L
 private const val PLAYBACK_STREAM_FAILOVER_FETCH_TIMEOUT_MS = 15_000L
-private const val MAX_PLAYBACK_STREAM_FAILOVER_ATTEMPTS = 8
 
 /**
  * Schedules incremental badge matching for source streams in the background.
@@ -838,7 +837,10 @@ internal fun PlayerRuntimeController.switchToSourceStream(
                 player.playWhenReady = true
                 player.prepare()
             } catch (e: Exception) {
-                _uiState.update { it.copy(error = e.message ?: context.getString(com.nuvio.tv.R.string.player_error_play_stream_failed)) }
+                val message = e.message ?: context.getString(com.nuvio.tv.R.string.player_error_play_stream_failed)
+                if (!tryNextStreamAfterPlaybackFailure(message)) {
+                    _uiState.update { it.copy(error = message) }
+                }
             }
         }
     } ?: run {
@@ -887,17 +889,14 @@ internal fun PlayerRuntimeController.tryNextStreamAfterPlaybackFailure(
                 failedSourceKey?.let(failedStreamKeys::add)
             }
             val cached = _uiState.value.sourceAllStreams
-            val fetched = if (cached.isEmpty()) fetchPlaybackFailoverStreams() else emptyList()
-            val candidates = (cached + fetched).distinctBy { it.stableKey() }
-            var attempts = 0
+            val fetched = fetchPlaybackFailoverStreams()
+            val candidates = mergeSourceStreams(cached, fetched)
 
             for (candidate in candidates) {
-                if (attempts >= MAX_PLAYBACK_STREAM_FAILOVER_ATTEMPTS) break
                 if (candidate.isExternal() || candidate.stableKey() in failedStreamKeys) continue
                 val directUrl = candidate.getStreamUrl()
                 if (!directUrl.isNullOrBlank() && directUrl in failedStreamUrls) continue
 
-                attempts++
                 failedStreamKeys += candidate.stableKey()
                 val playable = if (candidate.isTorrent() || directUrl.isNullOrBlank()) {
                     resolveDirectDebridStreamIfNeeded(candidate, currentSeason, currentEpisode)
@@ -933,13 +932,46 @@ internal fun PlayerRuntimeController.tryNextStreamAfterPlaybackFailure(
 
 private suspend fun PlayerRuntimeController.fetchPlaybackFailoverStreams(): List<Stream> {
     val type = contentType ?: return emptyList()
-    val video = currentVideoId ?: contentId ?: return emptyList()
+    val rawVideo = currentVideoId ?: contentId ?: return emptyList()
     val season = currentSeason.takeIf { type.equals("series", true) || type.equals("tv", true) }
     val episode = currentEpisode.takeIf { type.equals("series", true) || type.equals("tv", true) }
+    val identity = com.nuvio.tv.domain.model.CanonicalMediaIdentity.create(
+        type = type,
+        contentId = contentId,
+        videoId = rawVideo,
+        season = season,
+        episode = episode
+    )
     return withTimeoutOrNull(PLAYBACK_STREAM_FAILOVER_FETCH_TIMEOUT_MS) {
-        streamRepository.getStreamsFromAllAddons(type, video, season, episode, forceRefresh = true)
-            .first { result -> result is NetworkResult.Success && result.data.any { it.streams.isNotEmpty() } }
-            .let { result -> (result as NetworkResult.Success).data.flatMap { it.streams } }
+        coroutineScope {
+            val addonLoad = async {
+                var latest: List<Stream> = emptyList()
+                streamRepository.getStreamsFromAllAddons(
+                    type,
+                    identity.streamRequestId,
+                    season,
+                    episode,
+                    forceRefresh = true
+                ).collect { result ->
+                    if (result is NetworkResult.Success) {
+                        latest = mergeSourceStreams(latest, result.data.flatMap { it.streams })
+                    }
+                }
+                latest
+            }
+            val supplementalLoad = async {
+                val mediaTitle = _uiState.value.contentName?.takeIf { it.isNotBlank() } ?: _uiState.value.title
+                val mediaYear = _uiState.value.releaseYear?.take(4)?.toIntOrNull()
+                val cloud = async {
+                    cloudLibraryRepository.findMatchingStreams(mediaTitle, mediaYear, season, episode)
+                }
+                val easyNews = async {
+                    directDebridResolver.searchEasyNewsStreams(mediaTitle, season, episode, mediaYear)
+                }
+                mergeSourceStreams(cloud.await(), easyNews.await())
+            }
+            mergeSourceStreams(addonLoad.await(), supplementalLoad.await())
+        }
     }.orEmpty()
 }
 

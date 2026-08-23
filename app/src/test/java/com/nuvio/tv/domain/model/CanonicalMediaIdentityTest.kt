@@ -17,4 +17,17 @@ class CanonicalMediaIdentityTest {
         assertEquals("tmdb:550", identity.contentId)
         assertEquals("movie|tmdb:550", identity.contentKey)
     }
+
+    @Test fun rebuildsSeriesRequestFromCanonicalParentAndCoordinates() {
+        val identity = CanonicalMediaIdentity.create(
+            type = "series",
+            contentId = "tt8115702",
+            videoId = "stale-or-provider-specific-id",
+            season = 1,
+            episode = 7
+        )
+
+        assertEquals("tt8115702:1:7", identity.streamRequestId)
+        assertEquals("series|tt8115702|tt8115702:1:7|1|7", identity.videoKey)
+    }
 }

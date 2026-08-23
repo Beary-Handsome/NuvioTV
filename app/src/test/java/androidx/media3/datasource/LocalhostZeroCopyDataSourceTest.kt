@@ -185,7 +185,7 @@ class LocalhostZeroCopyDataSourceTest {
     }
 
     @Test
-    fun testHttpError404() {
+    fun testHttpErrorIsRejected() {
         val serverSocket = ServerSocket(0)
         val port = serverSocket.localPort
 
@@ -217,9 +217,15 @@ class LocalhostZeroCopyDataSourceTest {
             .build()
         
         try {
-            assertThrows(HttpDataSource.InvalidResponseCodeException::class.java) {
+            val failure = assertThrows(HttpDataSource.HttpDataSourceException::class.java) {
                 dataSource.open(dataSpec)
             }
+            var cause: Throwable? = failure
+            while (cause != null && cause !is HttpDataSource.InvalidResponseCodeException) {
+                cause = cause.cause
+            }
+            assertTrue(cause is HttpDataSource.InvalidResponseCodeException)
+            assertTrue((cause as HttpDataSource.InvalidResponseCodeException).responseCode !in 200..299)
         } finally {
             dataSource.close()
             serverSocket.close()

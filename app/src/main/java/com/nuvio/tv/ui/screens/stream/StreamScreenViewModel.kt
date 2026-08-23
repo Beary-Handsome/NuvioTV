@@ -150,7 +150,7 @@ class StreamScreenViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(
         StreamScreenUiState(
-            videoId = videoId,
+            videoId = mediaIdentity.streamRequestId,
             contentType = contentType,
             title = title,
             poster = poster,
@@ -447,7 +447,7 @@ class StreamScreenViewModel @Inject constructor(
                                 poster = poster,
                                 backdrop = backdrop,
                                 logo = logo,
-                                videoId = videoId,
+                                videoId = mediaIdentity.streamRequestId,
                                 season = season,
                                 episode = episode,
                                 episodeTitle = episodeName,
@@ -670,7 +670,7 @@ class StreamScreenViewModel @Inject constructor(
             val streamLoadInner = launch {
                 streamRepository.getStreamsFromAllAddons(
                     type = contentType,
-                    videoId = videoId,
+                    videoId = mediaIdentity.streamRequestId,
                     season = season,
                     episode = episode,
                     forceRefresh = forceRefresh
@@ -1463,7 +1463,7 @@ class StreamScreenViewModel @Inject constructor(
             poster = poster,
             backdrop = backdrop,
             logo = logo,
-            videoId = videoId,
+            videoId = mediaIdentity.streamRequestId,
             season = season,
             episode = episode,
             episodeTitle = episodeName,

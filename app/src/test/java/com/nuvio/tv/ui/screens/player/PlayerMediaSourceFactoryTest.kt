@@ -4,10 +4,20 @@ import androidx.media3.common.MimeTypes
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.Base64
 
 class PlayerMediaSourceFactoryTest {
+    @Test
+    fun `authenticated streams disable parallel range optimizations`() {
+        assertFalse(
+            PlayerMediaSourceFactory.allowsRangeOptimizations(
+                mapOf("authorization" to "Basic credentials")
+            )
+        )
+        assertTrue(PlayerMediaSourceFactory.allowsRangeOptimizations(emptyMap()))
+    }
 
     @Test
     fun `inferMimeType prefers response content type for manifest urls without extension`() {

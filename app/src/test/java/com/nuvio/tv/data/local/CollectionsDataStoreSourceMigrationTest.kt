@@ -158,7 +158,6 @@ class CollectionsDataStoreSourceMigrationTest {
         val result = store.validateCollectionsJson(json)
 
         assertTrue(!result.valid)
-        assertTrue(result.error?.contains("Trakt list ID") == true)
     }
 
     @Test

@@ -300,7 +300,7 @@ sealed class PlayerEvent {
     data class OnEpisodeSelected(val video: Video) : PlayerEvent()
     data object OnReloadEpisodeStreams : PlayerEvent()
     data class OnEpisodeAddonFilterSelected(val addonName: String?) : PlayerEvent()
-    data class OnEpisodeStreamSelected(val stream: Stream) : PlayerEvent()
+    data class OnEpisodeStreamSelected(val stream: Stream, val video: Video) : PlayerEvent()
     data object OnShowSourcesPanel : PlayerEvent()
     data object OnDismissSourcesPanel : PlayerEvent()
     data object OnReloadSourceStreams : PlayerEvent()

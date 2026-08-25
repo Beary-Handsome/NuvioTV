@@ -1537,7 +1537,7 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
             filterEpisodeStreamsByAddon(event.addonName)
         }
         is PlayerEvent.OnEpisodeStreamSelected -> {
-            switchToEpisodeStream(event.stream)
+            switchToEpisodeStream(event.stream, forcedTargetVideo = event.video)
         }
         PlayerEvent.OnShowSourcesPanel -> {
             showSourcesPanel()

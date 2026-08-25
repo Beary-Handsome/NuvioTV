@@ -45,7 +45,7 @@ data class Stream(
     fun isTorrent(): Boolean =
         !isDirectDebrid() &&
             getStreamUrl().isNullOrBlank() &&
-            (!infoHash.isNullOrBlank() || !torrentMagnetUri().isNullOrBlank() || hasTorrentUrl())
+            (!getEffectiveInfoHash().isNullOrBlank() || !torrentMagnetUri().isNullOrBlank() || hasTorrentUrl())
 
     fun needsLocalDebridResolve(): Boolean =
         isTorrent() && getStreamUrl().isNullOrBlank()

@@ -121,6 +121,7 @@ import com.nuvio.tv.data.local.LibassRenderType
 import com.nuvio.tv.data.local.SubtitleStyleSettings
 import com.nuvio.tv.data.local.StreamAutoPlayMode
 import com.nuvio.tv.domain.model.Subtitle
+import com.nuvio.tv.domain.model.Video
 import com.nuvio.tv.domain.model.WatchProgress
 import com.nuvio.tv.ui.components.LoadingIndicator
 import android.text.format.DateFormat
@@ -1257,7 +1258,22 @@ fun PlayerScreen(
                     onSeasonSelected = { viewModel.onEvent(PlayerEvent.OnEpisodeSeasonSelected(it)) },
                     onAddonFilterSelected = { viewModel.onEvent(PlayerEvent.OnEpisodeAddonFilterSelected(it)) },
                     onEpisodeSelected = { viewModel.onEvent(PlayerEvent.OnEpisodeSelected(it)) },
-                    onStreamSelected = { viewModel.onEvent(PlayerEvent.OnEpisodeStreamSelected(it)) },
+                    onStreamSelected = { stream ->
+                        val target = uiState.episodesAll.firstOrNull { video ->
+                            video.id == uiState.episodeStreamsForVideoId
+                        } ?: uiState.episodes.firstOrNull { video ->
+                            video.id == uiState.episodeStreamsForVideoId
+                        } ?: Video(
+                            id = uiState.episodeStreamsForVideoId.orEmpty(),
+                            title = uiState.episodeStreamsTitle.orEmpty(),
+                            released = null,
+                            thumbnail = null,
+                            season = uiState.episodeStreamsSeason,
+                            episode = uiState.episodeStreamsEpisode,
+                            overview = null
+                        )
+                        viewModel.onEvent(PlayerEvent.OnEpisodeStreamSelected(stream, target))
+                    },
                     modifier = Modifier.align(Alignment.CenterEnd)
                 )
             }

@@ -1236,6 +1236,7 @@ internal fun PlayerRuntimeController.loadStreamsForEpisode(video: Video, forceRe
                         season = video.season,
                         episode = video.episode,
                         installedAddonNames = installedAddonNames,
+                        requestKey = requestKey,
                     ) { debridPreparationLaunched = true }
                     scheduleEpisodeBadgeApplication()
                 }
@@ -1263,13 +1264,15 @@ private fun PlayerRuntimeController.launchEpisodeDebridPreparationIfNeeded(
     season: Int?,
     episode: Int?,
     installedAddonNames: Set<String>,
+    requestKey: String,
     markLaunched: () -> Unit
 ) {
     if (launched || streams.none { it.isReadyForDebridPreparation() }) {
         return
     }
     markLaunched()
-    scope.launch {
+    val requestScope = episodeStreamsScope ?: return
+    requestScope.launch {
         val playerSettings = playerSettingsDataStore.playerSettings.first()
         directDebridStreamPreparer.prepare(
             streams = streams,
@@ -1278,7 +1281,9 @@ private fun PlayerRuntimeController.launchEpisodeDebridPreparationIfNeeded(
             playerSettings = playerSettings,
             installedAddonNames = installedAddonNames
         ) { original, prepared ->
-            replacePreparedEpisodeStream(original, prepared)
+            if (episodeStreamsCacheRequestKey == requestKey) {
+                replacePreparedEpisodeStream(original, prepared)
+            }
         }
     }
 }
@@ -1452,6 +1457,7 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(
         url = url,
         headers = newHeaders
     )
+    currentSourceStream = stream
     val playbackUrl = currentStreamUrl
     val playbackHeaders = currentHeaders
     persistedTrackPreference = null
@@ -1543,6 +1549,7 @@ private fun PlayerRuntimeController.switchToEpisodeStreamCommon(
     stream: Stream,
     forcedTargetVideo: Video? = null
 ) {
+    currentSourceStream = stream
     episodeStreamsScope?.cancel()
     episodeStreamsScope = null
     episodeStreamsJob = null
@@ -1899,8 +1906,27 @@ internal fun PlayerRuntimeController.playNextEpisode(userInitiated: Boolean = fa
                 innerJob.cancel()
             }
 
-            val streamToPlay = selectedStream?.let {
-                resolveDirectDebridStreamIfNeeded(it, nextVideo.season, nextVideo.episode)
+            val rejectedKeys = mutableSetOf<String>()
+            var candidate = selectedStream
+            var streamToPlay: Stream? = null
+            while (candidate != null && streamToPlay == null) {
+                val candidateKey = candidate.stableKey()
+                rejectedKeys += candidateKey
+                val resolved = resolveDirectDebridStreamIfNeeded(
+                    candidate,
+                    nextVideo.season,
+                    nextVideo.episode
+                )
+                if (resolved != null &&
+                    (!resolved.getStreamUrl().isNullOrBlank() || resolved.isTorrent())
+                ) {
+                    streamToPlay = resolved
+                } else {
+                    val remaining = lastSuccessData?.map { group ->
+                        group.copy(streams = group.streams.filterNot { it.stableKey() in rejectedKeys })
+                    }.orEmpty()
+                    candidate = trySelectStream(remaining)
+                }
             }
             if (streamToPlay != null) {
                 val sourceName = (streamToPlay.name?.takeIf { it.isNotBlank() } ?: streamToPlay.addonName).trim()

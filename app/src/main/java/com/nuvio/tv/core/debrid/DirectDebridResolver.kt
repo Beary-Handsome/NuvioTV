@@ -179,7 +179,11 @@ class DirectDebridResolver @Inject constructor(
         episode: Int?
     ): DirectDebridPlayableResult {
         if (!shouldResolveToPlayableStream(stream)) {
-            return DirectDebridPlayableResult.Success(stream)
+            return if (!stream.getStreamUrl().isNullOrBlank()) {
+                DirectDebridPlayableResult.Success(stream)
+            } else {
+                DirectDebridPlayableResult.MissingApiKey
+            }
         }
         return when (val result = resolve(stream, season, episode)) {
             is DirectDebridResolveResult.Success -> DirectDebridPlayableResult.Success(stream.withResolvedDebridUrl(result))
@@ -198,8 +202,7 @@ class DirectDebridResolver @Inject constructor(
         }
         if (!stream.isDirectDebrid() || stream.getStreamUrl() != null) return false
         val providerId = DebridProviders.byId(stream.clientResolve?.service)?.id ?: return false
-        return providerId == settings.activeResolverProviderId &&
-            settings.apiKeyFor(providerId).isNotBlank()
+        return settings.apiKeyFor(providerId).isNotBlank()
     }
 
     private suspend fun getCachedResult(cacheKey: String): DirectDebridResolveResult.Success? {
@@ -236,8 +239,8 @@ class DirectDebridResolver @Inject constructor(
                 val settings = dataStore.settings.first()
                 resolveViaAllDebrid(
                     settings.allDebridApiKey,
-                    stream.infoHash,
-                    stream.fileIdx,
+                    stream.getEffectiveInfoHash(),
+                    stream.getEffectiveFileIdx(),
                     stream.behaviorHints?.filename,
                     season,
                     episode
@@ -266,7 +269,7 @@ class DirectDebridResolver @Inject constructor(
         val resolve = clientResolve ?: return null
         val providerId = DebridProviders.byId(resolve.service)?.id ?: return null
         val settings = dataStore.settings.first()
-        if (!settings.canResolvePlayableLinks || providerId != settings.activeResolverProviderId) return null
+        if (!settings.canResolvePlayableLinks) return null
         val apiKey = settings.apiKeyFor(providerId).trim().takeIf { it.isNotBlank() } ?: return null
         val identity = resolve.infoHash
             ?: resolve.magnetUri

@@ -131,6 +131,6 @@ sealed class MetaDetailsEvent {
     data object OnLifecyclePause : MetaDetailsEvent()
     data object OnRatingClick : MetaDetailsEvent()
     data object OnRatingPickerDismiss : MetaDetailsEvent()
-    data class OnRate(val stars: Int) : MetaDetailsEvent()
+    data class OnRate(val providerRating: Int) : MetaDetailsEvent()
     data object OnClearRating : MetaDetailsEvent()
 }

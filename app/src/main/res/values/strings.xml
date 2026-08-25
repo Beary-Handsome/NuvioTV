@@ -235,6 +235,8 @@
     <string name="detail_clear_rating">Clear rating</string>
     <string name="detail_rating_save_failed">The rating could not be saved to every connected service.</string>
     <string name="detail_rating_clear_failed">The rating could not be removed from every connected service.</string>
+    <string name="detail_rating_unrated">Unrated</string>
+    <string name="detail_rating_value">%1$.1f</string>
     <string name="detail_tab_more_like_this">More like this</string>
     <string name="detail_tab_trailer">Trailer</string>
     <string name="detail_more_like_this_powered_by_tmdb">Powered by TMDB</string>

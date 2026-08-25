@@ -11,8 +11,8 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Push/read the user's Trakt ratings. The UI uses a 5-star control; Trakt
- * stores a 1..10 value, so a star maps to star * 2 (5★ = 10 … 1★ = 2).
+ * Push/read the user's Trakt ratings. The five-star UI uses half-star steps,
+ * which map directly to Trakt's integer 1..10 scale.
  */
 @Singleton
 class TraktRatingsService @Inject constructor(
@@ -23,11 +23,11 @@ class TraktRatingsService @Inject constructor(
         private const val TAG = "TraktRatingsSvc"
     }
 
-    /** Apply a 1..5 star rating to the item. Returns true on success. */
-    suspend fun rate(itemId: String, imdbId: String?, apiType: String, stars: Int): Boolean {
+    /** Apply a provider rating from 1..10. Returns true on success. */
+    suspend fun rate(itemId: String, imdbId: String?, apiType: String, providerRating: Int): Boolean {
         val ids = buildIds(itemId, imdbId)
         if (!ids.hasAnyId()) return false
-        val rating = stars.coerceIn(1, 5) * 2
+        val rating = providerRating.coerceIn(1, 10)
         val body = if (isMovie(apiType)) {
             TraktRatingsRequestDto(movies = listOf(TraktRatingMovieItemDto(rating = rating, ids = ids)))
         } else {

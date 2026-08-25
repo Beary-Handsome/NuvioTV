@@ -34,6 +34,8 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.material.icons.filled.StarHalf
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -2366,35 +2368,66 @@ private fun RatingPickerDialog(
     onDismiss: () -> Unit
 ) {
     val firstFocus = remember { FocusRequester() }
+    var previewRating by remember(currentRating) { mutableIntStateOf(currentRating?.coerceIn(1, 10) ?: 0) }
     LaunchedEffect(Unit) { firstFocus.requestFocus() }
     NuvioDialog(
         onDismiss = onDismiss,
         title = stringResource(R.string.detail_rate_title),
         subtitle = stringResource(R.string.detail_rate_subtitle)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.sm)
-        ) {
-            (1..5).forEach { stars ->
-                val selected = currentRating == stars * 2
-                Button(
-                    onClick = { onRate(stars) },
-                    modifier = Modifier
-                        .width(72.dp)
-                        .height(64.dp)
-                        .then(if (stars == 1) Modifier.focusRequester(firstFocus) else Modifier),
-                    colors = ButtonDefaults.colors(
-                        containerColor = if (selected) Color.White else NuvioTheme.colors.BackgroundCard,
-                        contentColor = if (selected) Color.Black else NuvioTheme.colors.TextPrimary
-                    ),
-                    contentPadding = PaddingValues(0.dp)
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.Star, contentDescription = null)
-                        Text("$stars")
+        Button(
+            onClick = { if (previewRating > 0) onRate(previewRating) },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(72.dp)
+                .focusRequester(firstFocus)
+                .onPreviewKeyEvent { event ->
+                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    when (event.key) {
+                        Key.DirectionLeft -> {
+                            previewRating = (previewRating - 1).coerceAtLeast(0)
+                            true
+                        }
+                        Key.DirectionRight -> {
+                            previewRating = (previewRating + 1).coerceAtMost(10)
+                            true
+                        }
+                        else -> false
                     }
+                },
+            colors = ButtonDefaults.colors(
+                containerColor = NuvioTheme.colors.BackgroundCard,
+                contentColor = NuvioTheme.colors.TextPrimary
+            ),
+            contentPadding = PaddingValues(horizontal = NuvioTheme.spacing.lg)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                (1..5).forEach { star ->
+                    val icon = when {
+                        previewRating >= star * 2 -> Icons.Default.Star
+                        previewRating == star * 2 - 1 -> Icons.Default.StarHalf
+                        else -> Icons.Default.StarBorder
+                    }
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = if (previewRating >= star * 2 - 1) NuvioTheme.colors.Secondary else NuvioTheme.colors.TextTertiary,
+                        modifier = Modifier.width(42.dp)
+                    )
                 }
+                Spacer(Modifier.width(NuvioTheme.spacing.md))
+                Text(
+                    text = if (previewRating == 0) {
+                        stringResource(R.string.detail_rating_unrated)
+                    } else {
+                        stringResource(R.string.detail_rating_value, previewRating / 2f)
+                    },
+                    style = MaterialTheme.typography.titleMedium
+                )
             }
         }
         if (currentRating != null) {

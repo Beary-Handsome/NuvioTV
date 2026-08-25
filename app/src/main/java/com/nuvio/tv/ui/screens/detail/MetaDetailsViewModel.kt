@@ -383,7 +383,7 @@ class MetaDetailsViewModel @Inject constructor(
             MetaDetailsEvent.OnLifecyclePause -> handleLifecyclePause()
             MetaDetailsEvent.OnRatingClick -> _uiState.update { it.copy(showRatingPicker = true) }
             MetaDetailsEvent.OnRatingPickerDismiss -> _uiState.update { it.copy(showRatingPicker = false) }
-            is MetaDetailsEvent.OnRate -> rate(event.stars)
+            is MetaDetailsEvent.OnRate -> rate(event.providerRating)
             MetaDetailsEvent.OnClearRating -> clearRating()
         }
     }
@@ -2167,25 +2167,25 @@ class MetaDetailsViewModel @Inject constructor(
         }
     }
 
-    /** Apply a 1..5 star rating to the current item, pushing it to Trakt. */
-    private fun rate(stars: Int) {
+    /** Apply a half-star rating encoded on the providers' integer 1..10 scale. */
+    private fun rate(providerRating: Int) {
         val meta = _uiState.value.meta ?: return
         val previous = _uiState.value.userRating
-        val traktRating = stars.coerceIn(1, 5) * 2
+        val normalizedRating = providerRating.coerceIn(1, 10)
         userRatingWriteToken++
-        _uiState.update { it.copy(userRating = traktRating, ratingPending = true, showRatingPicker = false) }
+        _uiState.update { it.copy(userRating = normalizedRating, ratingPending = true, showRatingPicker = false) }
         viewModelScope.launch {
             val outcomes = buildList {
                 if (_uiState.value.isTraktAuthenticated) add(runCatching {
-                    traktRatingsService.rate(meta.id, meta.imdbId, meta.apiType, stars)
+                    traktRatingsService.rate(meta.id, meta.imdbId, meta.apiType, normalizedRating)
                 }.getOrDefault(false))
                 if (_uiState.value.isSimklAuthenticated) add(runCatching {
-                    simklRatingsService.rate(meta.toTrackingReference(), traktRating)
+                    simklRatingsService.rate(meta.toTrackingReference(), normalizedRating)
                 }.getOrDefault(false))
             }
             val applied = outcomes.any { it }
             val fullySynced = outcomes.isNotEmpty() && outcomes.all { it }
-            _uiState.update { it.copy(ratingPending = false, userRating = if (applied) traktRating else previous) }
+            _uiState.update { it.copy(ratingPending = false, userRating = if (applied) normalizedRating else previous) }
             if (!fullySynced) showMessage(context.getString(R.string.detail_rating_save_failed), isError = true)
         }
     }

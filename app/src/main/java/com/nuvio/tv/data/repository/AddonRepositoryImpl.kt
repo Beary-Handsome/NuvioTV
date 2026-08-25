@@ -19,7 +19,6 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
@@ -30,16 +29,12 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.launch
-import com.nuvio.tv.core.auth.AuthManager
-import com.nuvio.tv.core.sync.AddonSyncService
 import javax.inject.Inject
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 
 class AddonRepositoryImpl @Inject constructor(
     private val api: AddonApi,
     private val preferences: AddonPreferences,
-    private val addonSyncService: AddonSyncService,
-    private val authManager: AuthManager,
     @ApplicationContext private val context: Context
 ) : AddonRepository {
 
@@ -51,10 +46,6 @@ class AddonRepositoryImpl @Inject constructor(
         private const val MANIFEST_SUFFIX = "/manifest.json"
         private const val MANIFEST_CACHE_TTL_MS = 6 * 60 * 60 * 1000L 
     }
-
-    private val syncScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private var syncJob: Job? = null
-    var isSyncingFromRemote = false
 
     private fun canonicalizeUrl(url: String): String {
         val trimmed = url.trim().trimEnd('/')
@@ -73,25 +64,8 @@ class AddonRepositoryImpl @Inject constructor(
 
     private fun normalizeUrl(url: String): String = canonicalizeUrl(url).lowercase()
 
-    private fun triggerRemoteSync() {
-        if (isSyncingFromRemote) {
-            Log.d(TAG, "triggerRemoteSync: skipped (syncing from remote)")
-            return
-        }
-        if (!authManager.isAuthenticated) {
-            Log.d(TAG, "triggerRemoteSync: skipped (not authenticated, state=${authManager.authState.value})")
-            return
-        }
-        Log.d(TAG, "triggerRemoteSync: scheduling push in 500ms")
-        syncJob?.cancel()
-        syncJob = syncScope.launch {
-            delay(500)
-            val result = addonSyncService.pushToRemote()
-            Log.d(TAG, "triggerRemoteSync: push result=${result.isSuccess} ${result.exceptionOrNull()?.message ?: ""}")
-        }
-    }
-
     private val gson = Gson()
+    private val syncScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val manifestCache = mutableMapOf<String, Addon>()
     private val manifestCacheLock = Any()
     private val manifestCacheRevision = MutableStateFlow(0L)
@@ -243,7 +217,6 @@ class AddonRepositoryImpl @Inject constructor(
     override suspend fun addAddon(url: String) {
         val cleanUrl = canonicalizeUrl(url)
         if (!preferences.addAddon(cleanUrl)) return
-        triggerRemoteSync()
     }
 
     override suspend fun removeAddon(url: String) {
@@ -253,12 +226,10 @@ class AddonRepositoryImpl @Inject constructor(
             persistManifestCacheToDisk()
             bumpManifestCacheRevision()
         }
-        triggerRemoteSync()
     }
 
     override suspend fun setAddonOrder(urls: List<String>) {
         if (!preferences.setAddonOrder(urls)) return
-        triggerRemoteSync()
     }
 
     override suspend fun setAddonEnabled(url: String, enabled: Boolean) {
@@ -267,7 +238,6 @@ class AddonRepositoryImpl @Inject constructor(
         if (enabled && getCachedManifest(cleanUrl) == null) {
             fetchAddon(cleanUrl)
         }
-        triggerRemoteSync()
     }
 
     suspend fun reconcileWithRemoteAddonUrls(

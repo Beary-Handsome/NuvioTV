@@ -7,7 +7,7 @@ val WatchProgressSource.providerId: TrackingProviderId?
     get() = when (this) {
         WatchProgressSource.TRAKT -> TrackingProviderId.TRAKT
         WatchProgressSource.SIMKL -> TrackingProviderId.SIMKL
-        WatchProgressSource.NUVIO_SYNC -> null
+        WatchProgressSource.LOCAL -> null
     }
 
 val LibrarySourceMode.providerId: TrackingProviderId?
@@ -21,8 +21,8 @@ fun effectiveWatchProgressSource(
     requestedSource: WatchProgressSource,
     isProviderAuthenticated: (TrackingProviderId) -> Boolean
 ): WatchProgressSource {
-    val providerId = requestedSource.providerId ?: return WatchProgressSource.NUVIO_SYNC
-    return requestedSource.takeIf { isProviderAuthenticated(providerId) } ?: WatchProgressSource.NUVIO_SYNC
+    val providerId = requestedSource.providerId ?: return WatchProgressSource.LOCAL
+    return requestedSource.takeIf { isProviderAuthenticated(providerId) } ?: WatchProgressSource.LOCAL
 }
 
 fun effectiveLibrarySourceMode(
@@ -55,7 +55,7 @@ fun effectiveTrackingSourceSelection(
 fun availableWatchProgressSources(
     connectedProviderIds: Set<TrackingProviderId>
 ): List<WatchProgressSource> = buildList {
-    add(WatchProgressSource.NUVIO_SYNC)
+    add(WatchProgressSource.LOCAL)
     if (TrackingProviderId.TRAKT in connectedProviderIds) add(WatchProgressSource.TRAKT)
     if (TrackingProviderId.SIMKL in connectedProviderIds) add(WatchProgressSource.SIMKL)
 }

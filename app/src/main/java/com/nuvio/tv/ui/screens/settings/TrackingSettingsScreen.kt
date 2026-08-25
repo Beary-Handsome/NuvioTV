@@ -626,14 +626,14 @@ private fun simklConnectionPresentation(state: SimklSettingsUiState): TrackingCo
 private fun watchProgressSourceLabel(source: WatchProgressSource): String = when (source) {
     WatchProgressSource.TRAKT -> stringResource(R.string.trakt_name)
     WatchProgressSource.SIMKL -> stringResource(R.string.simkl_name)
-    WatchProgressSource.NUVIO_SYNC -> stringResource(R.string.trakt_watch_progress_source_nuvio)
+    WatchProgressSource.LOCAL -> stringResource(R.string.tracking_source_local)
 }
 
 @Composable
 private fun librarySourceLabel(mode: LibrarySourceMode): String = when (mode) {
     LibrarySourceMode.TRAKT -> stringResource(R.string.trakt_name)
     LibrarySourceMode.SIMKL -> stringResource(R.string.simkl_name)
-    LibrarySourceMode.LOCAL -> stringResource(R.string.trakt_library_source_nuvio)
+    LibrarySourceMode.LOCAL -> stringResource(R.string.tracking_source_local)
 }
 
 @Composable

@@ -2,7 +2,6 @@ package com.nuvio.tv.ui.screens.library
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.nuvio.tv.core.auth.AuthManager
 import com.nuvio.tv.core.cloud.CloudLibraryFile
 import com.nuvio.tv.core.cloud.CloudLibraryItem
 import com.nuvio.tv.core.cloud.CloudLibraryItemType
@@ -25,7 +24,6 @@ import com.nuvio.tv.data.local.LibraryPreferences
 import com.nuvio.tv.data.local.PlayerPreference
 import com.nuvio.tv.data.local.PlayerSettingsDataStore
 import com.nuvio.tv.data.repository.TraktLibraryService
-import com.nuvio.tv.domain.model.AuthState
 import com.nuvio.tv.domain.model.LibraryEntry
 import com.nuvio.tv.domain.model.LibraryListTab
 import com.nuvio.tv.domain.model.LibrarySourceMode
@@ -142,7 +140,6 @@ data class LibraryUiState(
     val selectedWatchedFilter: LibraryWatchedFilter = LibraryWatchedFilter.ALL,
     val watchedMovieIds: Set<String> = emptySet(),
     val watchedSeriesIds: Set<String> = emptySet(),
-    val isNuvioAccount: Boolean = false,
     val isTrackingAuthenticated: Boolean = false,
     val posterCardWidthDp: Int = 126,
     val posterCardCornerRadiusDp: Int = 12,
@@ -167,7 +164,6 @@ class LibraryViewModel @Inject constructor(
     private val debridSettingsDataStore: DebridSettingsDataStore,
     private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
     private val libraryPreferences: LibraryPreferences,
-    private val authManager: AuthManager,
     private val trackingProviderRegistry: TrackingLibraryProviderRegistry,
     private val watchProgressRepository: com.nuvio.tv.domain.repository.WatchProgressRepository,
     private val watchedSeriesStateHolder: com.nuvio.tv.data.local.WatchedSeriesStateHolder,
@@ -616,7 +612,6 @@ class LibraryViewModel @Inject constructor(
                 libraryRepository.libraryItems,
                 libraryRepository.listTabs,
                 libraryPreferences.sortOption,
-                authManager.authState,
                 selectedProviderAuthenticated,
                 libraryPreferences.lastSelectedList,
                 libraryPreferences.lastSelectedType
@@ -628,23 +623,21 @@ class LibraryViewModel @Inject constructor(
                 @Suppress("UNCHECKED_CAST")
                 val listTabs = args[3] as List<LibraryListTab>
                 val persistedSortKey = args[4] as String?
-                val authState = args[5] as AuthState
-                val isTrackingAuthenticated = args[6] as Boolean
-                val persistedListKey = args[7] as String?
-                val persistedTypeKey = args[8] as String?
+                val isTrackingAuthenticated = args[5] as Boolean
+                val persistedListKey = args[6] as String?
+                val persistedTypeKey = args[7] as String?
                 DataBundle(
                     sourceMode = sourceMode,
                     isSyncing = isSyncing,
                     items = items,
                     listTabs = listTabs,
                     persistedSortKey = persistedSortKey,
-                    authState = authState,
                     isTrackingAuthenticated = isTrackingAuthenticated,
                     persistedListKey = persistedListKey,
                     persistedTypeKey = persistedTypeKey
                 )
             }.collectLatest { bundle ->
-                val (sourceMode, isSyncing, items, listTabs, persistedSortKey, authState, isTrackingAuthenticated, persistedListKey, persistedTypeKey) = bundle
+                val (sourceMode, isSyncing, items, listTabs, persistedSortKey, isTrackingAuthenticated, persistedListKey, persistedTypeKey) = bundle
                 val itemsWithFacets = items.map { item -> enrichedLibraryFacets[item.facetKey()] ?: item }
                 _uiState.update { current ->
                     val nextSelectedList = when {
@@ -681,8 +674,6 @@ class LibraryViewModel @Inject constructor(
                         .takeIf { it in sortOptions }
                         ?: modeDefault
 
-                    val isNuvioAccount = sourceMode == LibrarySourceMode.LOCAL && authState is AuthState.FullAccount
-
                     val updated = current.copy(
                         sourceMode = sourceMode,
                         allItems = itemsWithFacets,
@@ -692,7 +683,6 @@ class LibraryViewModel @Inject constructor(
                         selectedListKey = nextSelectedList,
                         selectedSortOption = nextSelectedSort,
                         manageSelectedListKey = nextManageSelected,
-                        isNuvioAccount = isNuvioAccount,
                         isTrackingAuthenticated = isTrackingAuthenticated,
                         isSyncing = isSyncing,
                         isLoading = isSyncing && items.isEmpty()
@@ -836,7 +826,6 @@ class LibraryViewModel @Inject constructor(
         val items: List<LibraryEntry>,
         val listTabs: List<LibraryListTab>,
         val persistedSortKey: String?,
-        val authState: AuthState,
         val isTrackingAuthenticated: Boolean,
         val persistedListKey: String? = null,
         val persistedTypeKey: String? = null

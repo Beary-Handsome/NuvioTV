@@ -427,7 +427,6 @@ fun AddonManagerScreen(
                 RefreshAddonsEntryCard(
                     subtitle = refreshAddonsSubtitle,
                     onClick = {
-                        viewModel.requestAddonSyncNow()
                         refreshAddonsSubtitle = refreshedAddonsSubtitle
                     },
                     modifier = Modifier.focusProperties {

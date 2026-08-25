@@ -1,8 +1,6 @@
 @file:OptIn(ExperimentalTvMaterial3Api::class)
 
-package com.nuvio.tv.ui.screens.account
-
-import com.nuvio.tv.ui.theme.NuvioTheme
+package com.nuvio.tv.ui.screens.settings
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -27,6 +25,7 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Border
 import androidx.tv.material3.ClickableSurfaceDefaults
@@ -34,6 +33,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
+import com.nuvio.tv.ui.theme.NuvioTheme
 
 @Composable
 internal fun InputField(
@@ -46,13 +46,13 @@ internal fun InputField(
     onImeAction: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    val textFieldFocusRequester = remember { FocusRequester() }
+    val focusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
     var isEditing by remember { mutableStateOf(false) }
 
     LaunchedEffect(isEditing) {
         if (isEditing) {
-            textFieldFocusRequester.requestFocus()
+            focusRequester.requestFocus()
             keyboardController?.show()
         }
     }
@@ -83,7 +83,7 @@ internal fun InputField(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = NuvioTheme.spacing.lg, vertical = 14.dp)
-                .focusRequester(textFieldFocusRequester)
+                .focusRequester(focusRequester)
                 .onFocusChanged {
                     if (!it.isFocused && isEditing) {
                         isEditing = false
@@ -91,10 +91,7 @@ internal fun InputField(
                     }
                 },
             singleLine = true,
-            keyboardOptions = KeyboardOptions(
-                keyboardType = keyboardType,
-                imeAction = imeAction
-            ),
+            keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = imeAction),
             keyboardActions = KeyboardActions(
                 onDone = {
                     onImeAction()
@@ -107,11 +104,9 @@ internal fun InputField(
                     keyboardController?.hide()
                 }
             ),
-            textStyle = MaterialTheme.typography.bodyMedium.copy(
-                color = NuvioTheme.colors.TextPrimary
-            ),
+            textStyle = MaterialTheme.typography.bodyMedium.copy(color = NuvioTheme.colors.TextPrimary),
             cursorBrush = SolidColor(if (isEditing) NuvioTheme.colors.Secondary else Color.Transparent),
-            visualTransformation = if (isPassword) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
+            visualTransformation = if (isPassword) PasswordVisualTransformation() else VisualTransformation.None,
             decorationBox = { innerTextField ->
                 if (value.isEmpty()) {
                     Text(

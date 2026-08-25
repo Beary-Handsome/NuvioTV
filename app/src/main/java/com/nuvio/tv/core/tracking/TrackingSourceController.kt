@@ -1,7 +1,5 @@
 package com.nuvio.tv.core.tracking
 
-import com.nuvio.tv.core.sync.StartupSyncService
-import com.nuvio.tv.core.sync.WatchedItemsSyncService
 import com.nuvio.tv.data.local.ContinueWatchingEnrichmentCache
 import com.nuvio.tv.data.local.TraktSettingsDataStore
 import com.nuvio.tv.data.local.WatchProgressPreferences
@@ -23,10 +21,8 @@ class TrackingSourceController @Inject constructor(
     private val settingsDataStore: TraktSettingsDataStore,
     private val traktProgressService: TraktProgressService,
     private val simklSyncRepository: SimklSyncRepository,
-    private val startupSyncService: StartupSyncService,
     private val watchedItemsPreferences: WatchedItemsPreferences,
     private val watchProgressPreferences: WatchProgressPreferences,
-    private val watchedItemsSyncService: WatchedItemsSyncService,
     private val watchedSeriesStateHolder: WatchedSeriesStateHolder,
     private val continueWatchingEnrichmentCache: ContinueWatchingEnrichmentCache
 ) {
@@ -84,10 +80,7 @@ class TrackingSourceController @Inject constructor(
                 watchedSeriesStateHolder.update(emptySet())
                 simklSyncRepository.refresh(TrackingRefreshIntent.USER_INITIATED)
             }
-            WatchProgressSource.NUVIO_SYNC -> {
-                repopulateWatchedItemsFromNuvioSync()
-                startupSyncService.requestSyncNow()
-            }
+            WatchProgressSource.LOCAL -> Unit
         }
     }
 
@@ -98,12 +91,4 @@ class TrackingSourceController @Inject constructor(
         }
     }
 
-    private suspend fun repopulateWatchedItemsFromNuvioSync() {
-        runCatching {
-            val remoteItems = watchedItemsSyncService.pullFromRemote().getOrElse { return }
-            if (remoteItems.isNotEmpty()) {
-                watchedItemsPreferences.replaceWithRemoteItems(remoteItems)
-            }
-        }
-    }
 }

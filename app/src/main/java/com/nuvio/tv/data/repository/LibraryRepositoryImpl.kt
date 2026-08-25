@@ -1,10 +1,8 @@
 package com.nuvio.tv.data.repository
 
 import android.util.Log
-import com.nuvio.tv.core.auth.AuthManager
 import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.core.profile.ProfileManager
-import com.nuvio.tv.core.sync.LibrarySyncService
 import com.nuvio.tv.core.tracking.TrackingLibraryProviderRegistry
 import com.nuvio.tv.core.tracking.TrackingMembershipApplyResult
 import com.nuvio.tv.core.tracking.TrackingProviderId
@@ -27,12 +25,7 @@ import com.nuvio.tv.domain.model.ListMembershipSnapshot
 import com.nuvio.tv.domain.model.SavedLibraryItem
 import com.nuvio.tv.domain.model.TraktListPrivacy
 import com.nuvio.tv.domain.repository.LibraryRepository
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -44,7 +37,6 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.onStart
-import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -56,33 +48,16 @@ class LibraryRepositoryImpl @Inject constructor(
     private val traktAuthDataStore: TraktAuthDataStore,
     private val traktSettingsDataStore: TraktSettingsDataStore,
     private val traktLibraryService: TraktLibraryService,
-    private val librarySyncService: LibrarySyncService,
-    private val authManager: AuthManager,
     private val metaRepository: MetaRepository,
     private val trackingProviders: TrackingLibraryProviderRegistry,
     private val profileManager: ProfileManager,
 ) : LibraryRepository {
 
-    private val syncScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val hydratedLogoIds = mutableSetOf<String>()
-    private var syncJob: Job? = null
     private val _isSyncingFromRemote = MutableStateFlow(false)
     var isSyncingFromRemote: Boolean
         get() = _isSyncingFromRemote.value
         set(value) { _isSyncingFromRemote.value = value }
-    @Volatile
-    var hasCompletedInitialPull = false
-
-    private fun triggerRemoteSync(profileId: Int) {
-        if (!hasCompletedInitialPull) return
-        if (!authManager.isAuthenticated) return
-        syncJob?.cancel()
-        syncJob = syncScope.launch {
-            delay(500)
-            librarySyncService.pushToRemote(profileId)
-        }
-    }
-
     private val providerConnections = combine(
         trackingProviders.providers().map { provider ->
             provider.isAuthenticated.map { authenticated -> provider.providerId to authenticated }
@@ -225,7 +200,6 @@ class LibraryRepositoryImpl @Inject constructor(
                 profileId = profileId
             )
         }
-        triggerRemoteSync(profileId)
         return TrackingMembershipApplyResult()
     }
 
@@ -289,7 +263,6 @@ class LibraryRepositoryImpl @Inject constructor(
                     profileId = profileId
                 )
             }
-            triggerRemoteSync(profileId)
         }
 
         val failures = dispatchTrackingMembershipChanges(

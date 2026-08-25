@@ -6,7 +6,6 @@ import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.R
 import com.nuvio.tv.core.sync.CollectionSyncService
 import com.nuvio.tv.core.sync.HomeCatalogSettingsSyncService
-import com.nuvio.tv.core.sync.StartupSyncService
 import com.nuvio.tv.core.sync.homeCatalogKey
 import com.nuvio.tv.core.sync.homeLegacyDisabledCatalogKey
 import com.nuvio.tv.core.network.NetworkResult
@@ -70,7 +69,6 @@ class AddonManagerViewModel @Inject constructor(
     private val collectionsDataStore: CollectionsDataStore,
     private val collectionSyncService: CollectionSyncService,
     private val homeCatalogSettingsSyncService: HomeCatalogSettingsSyncService,
-    private val startupSyncService: StartupSyncService,
     private val profileManager: ProfileManager,
     private val tmdbCollectionSourceResolver: TmdbCollectionSourceResolver,
     private val traktPublicListSourceResolver: TraktPublicListSourceResolver,
@@ -105,10 +103,6 @@ class AddonManagerViewModel @Inject constructor(
         observeCatalogPreferences()
         observeCollections()
         loadLogoBytes()
-    }
-
-    fun requestAddonSyncNow() {
-        startupSyncService.requestAddonSyncNow()
     }
 
     private fun loadLogoBytes() {

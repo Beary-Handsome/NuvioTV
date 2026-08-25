@@ -24,10 +24,11 @@ import javax.inject.Singleton
 enum class WatchProgressSource {
     TRAKT,
     SIMKL,
-    NUVIO_SYNC;
+    LOCAL;
 
     companion object {
         fun fromStorage(value: String?): WatchProgressSource {
+            if (value == "NUVIO_SYNC") return LOCAL
             return entries.firstOrNull { it.name == value } ?: TRAKT
         }
     }

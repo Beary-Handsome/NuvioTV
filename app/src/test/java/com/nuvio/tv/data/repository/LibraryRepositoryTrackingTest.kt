@@ -1,9 +1,7 @@
 package com.nuvio.tv.data.repository
 
 import android.content.Context
-import com.nuvio.tv.core.auth.AuthManager
 import com.nuvio.tv.core.profile.ProfileManager
-import com.nuvio.tv.core.sync.LibrarySyncService
 import com.nuvio.tv.core.tracking.TrackingLibraryProvider
 import com.nuvio.tv.core.tracking.TrackingLibraryProviderRegistry
 import com.nuvio.tv.core.tracking.TrackingMembershipRemovalConfirmation
@@ -157,8 +155,6 @@ class LibraryRepositoryTrackingTest {
             traktAuthDataStore = mockk<TraktAuthDataStore>(relaxed = true),
             traktSettingsDataStore = settings,
             traktLibraryService = mockk<TraktLibraryService>(relaxed = true),
-            librarySyncService = mockk<LibrarySyncService>(relaxed = true),
-            authManager = mockk<AuthManager>(relaxed = true),
             metaRepository = mockk<MetaRepository>(relaxed = true),
             trackingProviders = TrackingLibraryProviderRegistry(providers),
             profileManager = mockk<ProfileManager>(relaxed = true)

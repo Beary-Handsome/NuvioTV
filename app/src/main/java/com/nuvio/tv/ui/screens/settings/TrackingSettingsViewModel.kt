@@ -25,7 +25,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class TrackingSettingsUiState(
-    val watchProgressSource: WatchProgressSource = WatchProgressSource.NUVIO_SYNC,
+    val watchProgressSource: WatchProgressSource = WatchProgressSource.LOCAL,
     val librarySourceMode: LibrarySourceMode = LibrarySourceMode.LOCAL,
     val connectedProviderIds: Set<TrackingProviderId> = emptySet(),
     val simklAnimeIdPreference: SimklAnimeIdPreference = SimklAnimeIdPreference.DEFAULT,

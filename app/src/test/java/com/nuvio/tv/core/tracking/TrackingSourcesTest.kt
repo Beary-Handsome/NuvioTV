@@ -10,14 +10,14 @@ class TrackingSourcesTest {
     @Test
     fun `legacy source names retain their stored meaning`() {
         assertEquals(WatchProgressSource.TRAKT, WatchProgressSource.fromStorage("TRAKT"))
-        assertEquals(WatchProgressSource.NUVIO_SYNC, WatchProgressSource.fromStorage("NUVIO_SYNC"))
+        assertEquals(WatchProgressSource.LOCAL, WatchProgressSource.fromStorage("NUVIO_SYNC"))
         assertEquals(LibrarySourceMode.TRAKT, LibrarySourceMode.valueOf("TRAKT"))
     }
 
     @Test
     fun `remote watch source falls back to Nuvio Sync when disconnected`() {
         assertEquals(
-            WatchProgressSource.NUVIO_SYNC,
+            WatchProgressSource.LOCAL,
             effectiveWatchProgressSource(WatchProgressSource.SIMKL) { false }
         )
         assertEquals(
@@ -40,7 +40,7 @@ class TrackingSourcesTest {
 
     @Test
     fun `local sources do not map to remote providers`() {
-        assertNull(WatchProgressSource.NUVIO_SYNC.providerId)
+        assertNull(WatchProgressSource.LOCAL.providerId)
         assertNull(LibrarySourceMode.LOCAL.providerId)
     }
 
@@ -53,14 +53,14 @@ class TrackingSourcesTest {
 
         assertEquals(
             TrackingSourceSelection(
-                WatchProgressSource.NUVIO_SYNC,
+                WatchProgressSource.LOCAL,
                 LibrarySourceMode.LOCAL
             ),
             effectiveTrackingSourceSelection(requested, emptySet())
         )
         assertEquals(
             TrackingSourceSelection(
-                WatchProgressSource.NUVIO_SYNC,
+                WatchProgressSource.LOCAL,
                 LibrarySourceMode.TRAKT
             ),
             effectiveTrackingSourceSelection(requested, setOf(TrackingProviderId.TRAKT))
@@ -90,7 +90,7 @@ class TrackingSourcesTest {
 
         assertEquals(
             TrackingSourceSelection(
-                watchProgressSource = WatchProgressSource.NUVIO_SYNC,
+                watchProgressSource = WatchProgressSource.LOCAL,
                 librarySourceMode = LibrarySourceMode.TRAKT
             ),
             effectiveTrackingSourceSelection(
@@ -122,7 +122,7 @@ class TrackingSourcesTest {
 
         assertEquals(
             listOf(
-                WatchProgressSource.NUVIO_SYNC,
+                WatchProgressSource.LOCAL,
                 WatchProgressSource.TRAKT,
                 WatchProgressSource.SIMKL
             ),
@@ -141,7 +141,7 @@ class TrackingSourcesTest {
     @Test
     fun `disconnected providers are excluded from source pickers`() {
         assertEquals(
-            listOf(WatchProgressSource.NUVIO_SYNC),
+            listOf(WatchProgressSource.LOCAL),
             availableWatchProgressSources(emptySet())
         )
         assertEquals(
@@ -149,7 +149,7 @@ class TrackingSourcesTest {
             availableLibrarySourceModes(emptySet())
         )
         assertEquals(
-            listOf(WatchProgressSource.NUVIO_SYNC, WatchProgressSource.SIMKL),
+            listOf(WatchProgressSource.LOCAL, WatchProgressSource.SIMKL),
             availableWatchProgressSources(setOf(TrackingProviderId.SIMKL))
         )
         assertEquals(

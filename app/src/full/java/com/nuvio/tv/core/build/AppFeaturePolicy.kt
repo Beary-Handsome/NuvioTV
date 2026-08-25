@@ -1,7 +1,6 @@
 package com.nuvio.tv.core.build
 
 object AppFeaturePolicy {
-    val nuvioAccountEnabled: Boolean = false
     val pluginsEnabled: Boolean = true
     val inAppUpdatesEnabled: Boolean = false
     val inAppTrailerPlaybackEnabled: Boolean = true

@@ -106,7 +106,7 @@ class TrackingSettingsOverviewTest {
         setOverview(
             traktState = TraktUiState(mode = TraktConnectionMode.CONNECTED),
             trackingState = TrackingSettingsUiState(
-                watchProgressSource = WatchProgressSource.NUVIO_SYNC,
+                watchProgressSource = WatchProgressSource.LOCAL,
                 connectedProviderIds = setOf(TrackingProviderId.TRAKT),
                 isReady = true
             )

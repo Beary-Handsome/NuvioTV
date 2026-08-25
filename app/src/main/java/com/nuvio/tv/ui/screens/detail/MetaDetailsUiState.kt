@@ -90,7 +90,8 @@ data class MetaDetailsUiState(
     val userRating: Int? = null,
     val ratingPending: Boolean = false,
     val showRatingPicker: Boolean = false,
-    val isTraktAuthenticated: Boolean = false
+    val isTraktAuthenticated: Boolean = false,
+    val isSimklAuthenticated: Boolean = false
 )
 
 sealed class MetaDetailsEvent {

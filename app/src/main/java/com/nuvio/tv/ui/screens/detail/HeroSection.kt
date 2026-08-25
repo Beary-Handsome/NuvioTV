@@ -77,6 +77,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.painter.Painter
 import coil3.request.ImageRequest
@@ -101,6 +103,10 @@ fun HeroContentSection(
     isMovieWatched: Boolean,
     isMovieWatchedPending: Boolean,
     onToggleMovieWatched: () -> Unit,
+    ratingAvailable: Boolean = false,
+    userRating: Int? = null,
+    ratingPending: Boolean = false,
+    onRatingClick: () -> Unit = {},
     trailerAvailable: Boolean = false,
     onTrailerClick: () -> Unit = {},
     hideLogoDuringTrailer: Boolean = false,
@@ -281,6 +287,23 @@ fun HeroContentSection(
                                 onClick = onToggleMovieWatched,
                                 enabled = !isMovieWatchedPending,
                                 selected = isMovieWatched,
+                                selectedContainerColor = Color.White,
+                                selectedContentColor = Color.Black,
+                                onFocused = onHeroActionFocused
+                            )
+                        }
+
+                        if (ratingAvailable) {
+                            ActionIconButton(
+                                icon = if (userRating != null) Icons.Default.Star else Icons.Default.StarBorder,
+                                contentDescription = if (userRating != null) {
+                                    stringResource(R.string.detail_your_rating, userRating)
+                                } else {
+                                    stringResource(R.string.detail_rate_title)
+                                },
+                                onClick = onRatingClick,
+                                enabled = !ratingPending,
+                                selected = userRating != null,
                                 selectedContainerColor = Color.White,
                                 selectedContentColor = Color.Black,
                                 onFocused = onHeroActionFocused

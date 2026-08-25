@@ -5,6 +5,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.core.player.StreamAutoPlayPolicy
+import com.nuvio.tv.core.tracking.buildTrackingMediaReference
 import com.nuvio.tv.core.profile.ProfileManager
 import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.core.tmdb.TmdbMetadataService
@@ -93,6 +94,8 @@ class MetaDetailsViewModel @Inject constructor(
     private val traktCommentsService: TraktCommentsService,
     private val traktRelatedService: TraktRelatedService,
     private val traktRatingsService: com.nuvio.tv.data.repository.TraktRatingsService,
+    private val simklAuthRepository: com.nuvio.tv.data.simkl.SimklAuthRepository,
+    private val simklRatingsService: com.nuvio.tv.data.simkl.SimklRatingsService,
     private val traktSettingsDataStore: TraktSettingsDataStore,
     private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
     private val playerSettingsDataStore: PlayerSettingsDataStore,
@@ -164,6 +167,7 @@ class MetaDetailsViewModel @Inject constructor(
         observeMetaViewSettings()
         observeTrailerAutoplaySettings()
         observeTraktCommentsAvailability()
+        observeRatingProviders()
         observeLibraryState()
         observeWatchProgress()
         observeWatchedEpisodes()
@@ -264,6 +268,16 @@ class MetaDetailsViewModel @Inject constructor(
                         loadComments(meta)
                     }
                 }
+        }
+    }
+
+    private fun observeRatingProviders() {
+        viewModelScope.launch {
+            combine(traktAuthDataStore.isAuthenticated, simklAuthRepository.state) { trakt, simkl ->
+                trakt to simkl.isAuthenticated
+            }.distinctUntilChanged().collectLatest { (trakt, simkl) ->
+                _uiState.update { it.copy(isTraktAuthenticated = trakt, isSimklAuthenticated = simkl) }
+            }
         }
     }
 
@@ -453,9 +467,15 @@ class MetaDetailsViewModel @Inject constructor(
                 .distinctUntilChanged()
                 .collectLatest { (id, type) ->
                     val tokenAtStart = userRatingWriteToken
-                    val rating = runCatching {
-                        traktRatingsService.currentRating(id, _uiState.value.meta?.imdbId, type)
-                    }.getOrNull()
+                    val meta = _uiState.value.meta
+                    val media = meta?.toTrackingReference()
+                    val rating = when {
+                        traktAuthDataStore.isAuthenticated.first() -> runCatching {
+                            traktRatingsService.currentRating(id, meta?.imdbId, type)
+                        }.getOrNull()
+                        media != null -> runCatching { simklRatingsService.currentRating(media) }.getOrNull()
+                        else -> null
+                    }
                     // Don't clobber a rating the user set/cleared while this fetch
                     // was in flight: skip if a rate()/clearRating() bumped the token
                     // or an optimistic write is still pending.
@@ -2155,11 +2175,18 @@ class MetaDetailsViewModel @Inject constructor(
         userRatingWriteToken++
         _uiState.update { it.copy(userRating = traktRating, ratingPending = true, showRatingPicker = false) }
         viewModelScope.launch {
-            val ok = runCatching {
-                traktRatingsService.rate(meta.id, meta.imdbId, meta.apiType, stars)
-            }.getOrDefault(false)
-            _uiState.update { it.copy(ratingPending = false, userRating = if (ok) traktRating else previous) }
-            if (!ok) showMessage("Couldn't save rating to Trakt", isError = true)
+            val outcomes = buildList {
+                if (_uiState.value.isTraktAuthenticated) add(runCatching {
+                    traktRatingsService.rate(meta.id, meta.imdbId, meta.apiType, stars)
+                }.getOrDefault(false))
+                if (_uiState.value.isSimklAuthenticated) add(runCatching {
+                    simklRatingsService.rate(meta.toTrackingReference(), traktRating)
+                }.getOrDefault(false))
+            }
+            val applied = outcomes.any { it }
+            val fullySynced = outcomes.isNotEmpty() && outcomes.all { it }
+            _uiState.update { it.copy(ratingPending = false, userRating = if (applied) traktRating else previous) }
+            if (!fullySynced) showMessage(context.getString(R.string.detail_rating_save_failed), isError = true)
         }
     }
 
@@ -2169,13 +2196,27 @@ class MetaDetailsViewModel @Inject constructor(
         userRatingWriteToken++
         _uiState.update { it.copy(userRating = null, ratingPending = true, showRatingPicker = false) }
         viewModelScope.launch {
-            val ok = runCatching {
-                traktRatingsService.clear(meta.id, meta.imdbId, meta.apiType)
-            }.getOrDefault(false)
-            _uiState.update { it.copy(ratingPending = false, userRating = if (ok) null else previous) }
-            if (!ok) showMessage("Couldn't remove rating on Trakt", isError = true)
+            val outcomes = buildList {
+                if (_uiState.value.isTraktAuthenticated) add(runCatching {
+                    traktRatingsService.clear(meta.id, meta.imdbId, meta.apiType)
+                }.getOrDefault(false))
+                if (_uiState.value.isSimklAuthenticated) add(runCatching {
+                    simklRatingsService.clear(meta.toTrackingReference())
+                }.getOrDefault(false))
+            }
+            val cleared = outcomes.any { it }
+            val fullySynced = outcomes.isNotEmpty() && outcomes.all { it }
+            _uiState.update { it.copy(ratingPending = false, userRating = if (cleared) null else previous) }
+            if (!fullySynced) showMessage(context.getString(R.string.detail_rating_clear_failed), isError = true)
         }
     }
+
+    private fun Meta.toTrackingReference() = buildTrackingMediaReference(
+        contentType = apiType,
+        parentMetaId = imdbId ?: id,
+        title = name,
+        releaseInfo = releaseInfo
+    )
 
     private fun openListPicker() {
         val meta = _uiState.value.meta ?: return

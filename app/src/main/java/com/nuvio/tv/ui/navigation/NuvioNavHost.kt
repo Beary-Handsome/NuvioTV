@@ -1229,22 +1229,16 @@ fun NuvioNavHost(
             }
         }
 
-        composable(Screen.Account.route) {
-            AuthQrSignInScreen(
-                onBackPress = { navController.popBackStack() }
-            )
-        }
-
-        composable(Screen.AuthSignIn.route) {
-            AuthQrSignInScreen(
-                onBackPress = { navController.popBackStack() }
-            )
-        }
-
-        composable(Screen.AuthQrSignIn.route) {
-            AuthQrSignInScreen(
-                onBackPress = { navController.popBackStack() }
-            )
+        if (AppFeaturePolicy.nuvioAccountEnabled) {
+            composable(Screen.Account.route) {
+                AuthQrSignInScreen(onBackPress = { navController.popBackStack() })
+            }
+            composable(Screen.AuthSignIn.route) {
+                AuthQrSignInScreen(onBackPress = { navController.popBackStack() })
+            }
+            composable(Screen.AuthQrSignIn.route) {
+                AuthQrSignInScreen(onBackPress = { navController.popBackStack() })
+            }
         }
 
         composable(Screen.LayoutSettings.route) {

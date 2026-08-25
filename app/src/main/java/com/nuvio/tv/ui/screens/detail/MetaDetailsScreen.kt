@@ -31,6 +31,9 @@ import androidx.compose.foundation.relocation.bringIntoViewResponder
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -94,6 +97,7 @@ import androidx.tv.material3.Border
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
+import androidx.tv.material3.Icon
 import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.MaterialTheme
@@ -492,6 +496,9 @@ fun MetaDetailsScreen(
                     detailImdbRatingsVisibility = uiState.detailImdbRatingsVisibility,
                     isMovieWatched = uiState.isMovieWatched,
                     isMovieWatchedPending = uiState.isMovieWatchedPending,
+                    ratingAvailable = uiState.isTraktAuthenticated || uiState.isSimklAuthenticated,
+                    userRating = uiState.userRating,
+                    ratingPending = uiState.ratingPending,
                     moreLikeThis = uiState.moreLikeThis,
                     moreLikeThisSource = uiState.moreLikeThisSource,
                     posterCardCornerRadiusDp = posterCardCornerRadiusDp,
@@ -628,6 +635,7 @@ fun MetaDetailsScreen(
                     onToggleLibrary = { viewModel.onEvent(MetaDetailsEvent.OnToggleLibrary) },
                     onLibraryLongPress = { viewModel.onEvent(MetaDetailsEvent.OnLibraryLongPress) },
                     onToggleMovieWatched = { viewModel.onEvent(MetaDetailsEvent.OnToggleMovieWatched) },
+                    onRatingClick = { viewModel.onEvent(MetaDetailsEvent.OnRatingClick) },
                     onToggleEpisodeWatched = { video ->
                         viewModel.onEvent(MetaDetailsEvent.OnToggleEpisodeWatched(video))
                     },
@@ -790,6 +798,15 @@ fun MetaDetailsScreen(
             )
         }
 
+        if (uiState.showRatingPicker) {
+            RatingPickerDialog(
+                currentRating = uiState.userRating,
+                onRate = { viewModel.onEvent(MetaDetailsEvent.OnRate(it)) },
+                onClear = { viewModel.onEvent(MetaDetailsEvent.OnClearRating) },
+                onDismiss = { viewModel.onEvent(MetaDetailsEvent.OnRatingPickerDismiss) }
+            )
+        }
+
         val message = uiState.userMessage
         if (!message.isNullOrBlank()) {
             Box(
@@ -869,6 +886,9 @@ private fun MetaDetailsContent(
     detailImdbRatingsVisibility: DetailImdbRatingsVisibility,
     isMovieWatched: Boolean,
     isMovieWatchedPending: Boolean,
+    ratingAvailable: Boolean,
+    userRating: Int?,
+    ratingPending: Boolean,
     moreLikeThis: List<MetaPreview>,
     moreLikeThisSource: MoreLikeThisSource?,
     posterCardCornerRadiusDp: Int = 12,
@@ -903,6 +923,7 @@ private fun MetaDetailsContent(
     onToggleLibrary: () -> Unit,
     onLibraryLongPress: () -> Unit,
     onToggleMovieWatched: () -> Unit,
+    onRatingClick: () -> Unit,
     onToggleEpisodeWatched: (Video) -> Unit,
     onMarkSeasonWatched: (Int) -> Unit,
     onMarkSeasonUnwatched: (Int) -> Unit,
@@ -1693,6 +1714,10 @@ private fun MetaDetailsContent(
                         isMovieWatched = isMovieWatched,
                         isMovieWatchedPending = isMovieWatchedPending,
                         onToggleMovieWatched = onToggleMovieWatched,
+                        ratingAvailable = ratingAvailable,
+                        userRating = userRating,
+                        ratingPending = ratingPending,
+                        onRatingClick = onRatingClick,
                         mdbListRatings = visibleMdbListRatings,
                         hideMetaInfoImdb = !showStandardOverallRatings,
                         tmdbRating = tmdbRating.takeIf { showStandardOverallRatings },
@@ -2327,6 +2352,63 @@ private fun SynopsisOverlay(
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.White.copy(alpha = 0.4f)
                 )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun RatingPickerDialog(
+    currentRating: Int?,
+    onRate: (Int) -> Unit,
+    onClear: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val firstFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { firstFocus.requestFocus() }
+    NuvioDialog(
+        onDismiss = onDismiss,
+        title = stringResource(R.string.detail_rate_title),
+        subtitle = stringResource(R.string.detail_rate_subtitle)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.sm)
+        ) {
+            (1..5).forEach { stars ->
+                val selected = currentRating == stars * 2
+                Button(
+                    onClick = { onRate(stars) },
+                    modifier = Modifier
+                        .width(72.dp)
+                        .height(64.dp)
+                        .then(if (stars == 1) Modifier.focusRequester(firstFocus) else Modifier),
+                    colors = ButtonDefaults.colors(
+                        containerColor = if (selected) Color.White else NuvioTheme.colors.BackgroundCard,
+                        contentColor = if (selected) Color.Black else NuvioTheme.colors.TextPrimary
+                    ),
+                    contentPadding = PaddingValues(0.dp)
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Icons.Default.Star, contentDescription = null)
+                        Text("$stars")
+                    }
+                }
+            }
+        }
+        if (currentRating != null) {
+            Button(
+                onClick = onClear,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.colors(
+                    containerColor = NuvioTheme.colors.BackgroundCard,
+                    contentColor = NuvioTheme.colors.TextPrimary
+                )
+            ) {
+                Icon(Icons.Default.Delete, contentDescription = null)
+                Spacer(Modifier.width(NuvioTheme.spacing.sm))
+                Text(stringResource(R.string.detail_clear_rating))
             }
         }
     }

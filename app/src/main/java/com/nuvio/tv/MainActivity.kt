@@ -1,5 +1,7 @@
 package com.nuvio.tv
 
+import com.nuvio.tv.core.build.AppFeaturePolicy
+
 import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
@@ -534,7 +536,7 @@ class MainActivity : ComponentActivity() {
                         containerColor = NuvioTheme.colors.Background
                     )
                 ) {
-                    if (hasSeenAuthQrOnFirstLaunch == null) {
+                    if (AppFeaturePolicy.nuvioAccountEnabled && hasSeenAuthQrOnFirstLaunch == null) {
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
@@ -543,7 +545,7 @@ class MainActivity : ComponentActivity() {
                         return@Surface
                     }
 
-                    if (authState is AuthState.Loading) {
+                    if (AppFeaturePolicy.nuvioAccountEnabled && authState is AuthState.Loading) {
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
@@ -553,6 +555,7 @@ class MainActivity : ComponentActivity() {
                     }
 
                     if (
+                        AppFeaturePolicy.nuvioAccountEnabled &&
                         hasSeenAuthQrOnFirstLaunch == false &&
                         authState !is AuthState.FullAccount &&
                         !onboardingCompletedThisSession

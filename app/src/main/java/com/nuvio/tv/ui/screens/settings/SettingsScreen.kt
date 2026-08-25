@@ -224,7 +224,7 @@ private fun rememberSettingsSectionSpecs() = listOf(
         subtitle = stringResource(R.string.settings_debug_subtitle),
         destination = SettingsSectionDestination.Inline
     )
-)
+).filter { spec -> AppFeaturePolicy.nuvioAccountEnabled || spec.category != SettingsCategory.ACCOUNT }
 
 @Composable
 fun SettingsScreen(

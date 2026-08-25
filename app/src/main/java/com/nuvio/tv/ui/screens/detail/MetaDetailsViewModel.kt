@@ -109,6 +109,9 @@ class MetaDetailsViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(MetaDetailsUiState())
     val uiState: StateFlow<MetaDetailsUiState> = _uiState.asStateFlow()
 
+    private val _posterCardCornerRadiusDp = MutableStateFlow(12)
+    val posterCardCornerRadiusDp: StateFlow<Int> = _posterCardCornerRadiusDp.asStateFlow()
+
     private val localizedContext: Context
         get() {
             val tag = LocaleCache.localeTag.takeIf { it != LocaleCache.UNSET && it.isNotEmpty() }
@@ -169,6 +172,10 @@ class MetaDetailsViewModel @Inject constructor(
         observeBlurUnwatchedEpisodes()
         observeOverallRatingsVisibility()
         observeDetailImdbRatingsVisibility()
+        viewModelScope.launch {
+            layoutPreferenceDataStore.posterCardCornerRadiusDp
+                .collect { _posterCardCornerRadiusDp.value = it }
+        }
         observeShowFullReleaseDate()
         observeHideUnreleasedContent()
         loadMeta()
@@ -1372,12 +1379,21 @@ class MetaDetailsViewModel @Inject constructor(
                 )
             }
 
+            // Ratings the addon supplied on meta.videos[].rating. The repository below
+            // still wins wherever it has an entry.
+            val addonRatings: Map<Pair<Int, Int>, Double> = meta.videos.mapNotNull { video ->
+                val season = video.season ?: return@mapNotNull null
+                val episode = video.episode ?: return@mapNotNull null
+                val rating = video.rating ?: return@mapNotNull null
+                (season to episode) to rating
+            }.toMap()
+
             try {
                 val tmdbContentType = resolveTmdbContentType(meta)
                 if (tmdbContentType !in listOf(ContentType.SERIES, ContentType.TV)) {
                     _uiState.update {
                         it.copy(
-                            episodeImdbRatings = emptyMap(),
+                            episodeImdbRatings = addonRatings,
                             isEpisodeRatingsLoading = false,
                             episodeRatingsError = null
                         )
@@ -1397,9 +1413,13 @@ class MetaDetailsViewModel @Inject constructor(
                             state
                         } else {
                             state.copy(
-                                episodeImdbRatings = emptyMap(),
+                                episodeImdbRatings = addonRatings,
                                 isEpisodeRatingsLoading = false,
-                                episodeRatingsError = localizedContext.getString(R.string.ratings_unavailable)
+                                episodeRatingsError = if (addonRatings.isEmpty()) {
+                                    localizedContext.getString(R.string.ratings_unavailable)
+                                } else {
+                                    null
+                                }
                             )
                         }
                     }
@@ -1416,7 +1436,7 @@ class MetaDetailsViewModel @Inject constructor(
                         state
                     } else {
                         state.copy(
-                            episodeImdbRatings = ratings,
+                            episodeImdbRatings = addonRatings + ratings,
                             isEpisodeRatingsLoading = false,
                             episodeRatingsError = null
                         )
@@ -1431,9 +1451,13 @@ class MetaDetailsViewModel @Inject constructor(
                         state
                     } else {
                         state.copy(
-                            episodeImdbRatings = emptyMap(),
+                            episodeImdbRatings = addonRatings,
                             isEpisodeRatingsLoading = false,
-                            episodeRatingsError = localizedContext.getString(R.string.ratings_load_error)
+                            episodeRatingsError = if (addonRatings.isEmpty()) {
+                                localizedContext.getString(R.string.ratings_load_error)
+                            } else {
+                                null
+                            }
                         )
                     }
                 }

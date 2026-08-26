@@ -2397,36 +2397,46 @@ private fun RatingPickerDialog(
                 },
             colors = ButtonDefaults.colors(
                 containerColor = NuvioTheme.colors.BackgroundCard,
-                contentColor = NuvioTheme.colors.TextPrimary
+                contentColor = NuvioTheme.colors.TextPrimary,
+                focusedContainerColor = NuvioTheme.colors.FocusBackground,
+                focusedContentColor = NuvioTheme.colors.TextPrimary
             ),
             contentPadding = PaddingValues(horizontal = NuvioTheme.spacing.lg)
         ) {
-            Row(
+            Box(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
+                contentAlignment = Alignment.Center
             ) {
-                (1..5).forEach { star ->
-                    val icon = when {
-                        previewRating >= star * 2 -> Icons.Default.Star
-                        previewRating == star * 2 - 1 -> Icons.Default.StarHalf
-                        else -> Icons.Default.StarBorder
+                Row(
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    (1..5).forEach { star ->
+                        val icon = when {
+                            previewRating >= star * 2 -> Icons.Default.Star
+                            previewRating == star * 2 - 1 -> Icons.Default.StarHalf
+                            else -> Icons.Default.StarBorder
+                        }
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = null,
+                            tint = if (previewRating >= star * 2 - 1) {
+                                Color(0xFFFFC107)
+                            } else {
+                                NuvioTheme.colors.TextTertiary
+                            },
+                            modifier = Modifier.width(42.dp)
+                        )
                     }
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        tint = if (previewRating >= star * 2 - 1) NuvioTheme.colors.Secondary else NuvioTheme.colors.TextTertiary,
-                        modifier = Modifier.width(42.dp)
-                    )
                 }
-                Spacer(Modifier.width(NuvioTheme.spacing.md))
                 Text(
                     text = if (previewRating == 0) {
                         stringResource(R.string.detail_rating_unrated)
                     } else {
                         stringResource(R.string.detail_rating_value, previewRating / 2f)
                     },
-                    style = MaterialTheme.typography.titleMedium
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.align(Alignment.CenterEnd)
                 )
             }
         }

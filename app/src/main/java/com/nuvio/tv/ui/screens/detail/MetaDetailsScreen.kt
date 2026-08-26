@@ -2401,10 +2401,12 @@ private fun RatingPickerDialog(
                 focusedContainerColor = NuvioTheme.colors.FocusBackground,
                 focusedContentColor = NuvioTheme.colors.TextPrimary
             ),
-            contentPadding = PaddingValues(horizontal = NuvioTheme.spacing.lg)
+            contentPadding = PaddingValues(0.dp)
         ) {
             Box(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = NuvioTheme.spacing.lg),
                 contentAlignment = Alignment.Center
             ) {
                 Row(
